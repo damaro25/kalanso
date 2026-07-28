@@ -1,0 +1,862 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum RoleUtilisateur {
+  FONDATEUR
+  CHEF_ETABLISSEMENT
+  SECRETAIRE
+  COMPTABLE
+  ENSEIGNANT
+}
+
+enum Genre {
+  M
+  F
+}
+
+enum StatutInscription {
+  EN_COURS
+  TERMINEE
+  ABANDONNEE
+  TRANSFEREE
+}
+
+enum StatutAbsence {
+  PRESENT
+  ABSENT
+  RETARD
+}
+
+enum StatutFacture {
+  IMPAYEE
+  PARTIELLE
+  PAYEE
+  ANNULEE
+}
+
+enum TypeFacture {
+  ECOLAGE
+  INSCRIPTION
+  AUTRE
+}
+
+enum ModePaiement {
+  ESPECES
+  VIREMENT
+  CHEQUE
+  MOBILE_MONEY
+  AUTRE
+}
+
+enum OperateurMobileMoney {
+  ORANGE_MONEY
+  MTN_MOMO
+}
+
+enum StatutTransaction {
+  EN_ATTENTE
+  REUSSIE
+  ECHOUEE
+  ANNULEE
+}
+
+enum JourSemaine {
+  LUNDI
+  MARDI
+  MERCREDI
+  JEUDI
+  VENDREDI
+  SAMEDI
+}
+
+enum TypeMessage {
+  MANUEL
+  ABSENCE
+  RAPPEL_IMPAYE
+}
+
+enum StatutMessage {
+  EN_ATTENTE
+  ENVOYE
+  ECHEC
+}
+
+enum StatutDemandeInscription {
+  EN_ATTENTE
+  ACCEPTEE
+  REFUSEE
+}
+
+enum TypeDocument {
+  PHOTO
+  ATTESTATION
+  RELEVE_NOTES
+  EXTRAIT_NAISSANCE
+  AUTRE
+}
+
+enum StatutVerificationDocument {
+  EN_ATTENTE
+  VERIFIE
+  REJETE
+}
+
+enum StatutBulletinPaie {
+  BROUILLON
+  VALIDE
+  PAYE
+}
+
+enum TypePersonnel {
+  ENSEIGNANT
+  ADMINISTRATIF
+}
+
+enum TypeMouvement {
+  RECETTE
+  DEPENSE
+}
+
+enum StatutEmprunt {
+  EN_COURS
+  RETOURNE
+}
+
+enum CategorieMateriel {
+  MOBILIER
+  INFORMATIQUE
+  PEDAGOGIQUE
+  AUTRE
+}
+
+enum EtatMateriel {
+  BON
+  MOYEN
+  A_REPARER
+  HORS_SERVICE
+}
+
+// ─────────────────────────────────────────────
+// TENANT
+// ─────────────────────────────────────────────
+
+model Ecole {
+  id        String   @id @default(cuid())
+  nom       String
+  sigle     String?
+  ville     String?
+  telephone String?
+  email     String?
+  logoUrl   String?
+  actif     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  utilisateurs    Utilisateur[]
+  anneesScolaires AnneeScolaire[]
+  niveaux         Niveau[]
+  classes         Classe[]
+  personnels      Personnel[]
+  eleves          Eleve[]
+  parentsTuteurs  ParentTuteur[]
+  inscriptions    Inscription[]
+  absences        Absence[]
+  tarifsEcolage   TarifEcolage[]
+  fraisInscriptionNiveau FraisInscriptionNiveau[]
+  factures        Facture[]
+  paiements       Paiement[]
+  matieres        Matiere[]
+  notes           Note[]
+  creneaux        Creneau[]
+  salles          Salle[]
+  messagesParents MessageParent[]
+  transactionsMM  TransactionMobileMoney[]
+  demandesInscription DemandeInscription[]
+  bulletinsPaie   BulletinPaie[]
+  materiels       Materiel[]
+  mouvements      MouvementFinancier[]
+  livres          Livre[]
+  emprunts        Emprunt[]
+  annulationsAdmission AnnulationAdmission[]
+
+  @@map("ecoles")
+}
+
+// ─────────────────────────────────────────────
+// AUTH
+// ─────────────────────────────────────────────
+
+model Utilisateur {
+  id             String          @id @default(cuid())
+  ecoleId        String
+  ecole          Ecole           @relation(fields: [ecoleId], references: [id])
+  nom            String
+  prenom         String
+  email          String          @unique
+  motDePasseHash String
+  role           RoleUtilisateur
+  personnelId    String?         @unique
+  personnel      Personnel?      @relation(fields: [personnelId], references: [id])
+  actif          Boolean         @default(true)
+  dernierLoginAt DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([ecoleId])
+  @@map("utilisateurs")
+}
+
+// ─────────────────────────────────────────────
+// SCOLARITE STRUCTURE
+// ─────────────────────────────────────────────
+
+model AnneeScolaire {
+  id        String   @id @default(cuid())
+  ecoleId   String
+  ecole     Ecole    @relation(fields: [ecoleId], references: [id])
+  libelle   String
+  dateDebut DateTime
+  dateFin   DateTime
+  courante  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  classes      Classe[]
+  inscriptions Inscription[]
+  absences     Absence[]
+  factures     Facture[]
+
+  @@unique([ecoleId, libelle])
+  @@index([ecoleId])
+  @@map("annees_scolaires")
+}
+
+model Niveau {
+  id      String  @id @default(cuid())
+  ecoleId String
+  ecole   Ecole   @relation(fields: [ecoleId], references: [id])
+  nom     String
+  cycle   String?
+  ordre   Int     @default(0)
+
+  classes                 Classe[]
+  tarifsEcolage           TarifEcolage[]
+  fraisInscriptionNiveau  FraisInscriptionNiveau[]
+  matieres                Matiere[]
+  demandesInscription     DemandeInscription[]
+
+  @@unique([ecoleId, nom])
+  @@index([ecoleId])
+  @@map("niveaux")
+}
+
+// Frais d'inscription par défaut pour un niveau donné, sur une année scolaire.
+// Sert de valeur de repli quand une classe ne définit pas son propre montant
+// (Classe.fraisInscription = null) : voir FacturesService.genererFacturesEnrolement.
+// Un seul défaut par niveau/année (contrairement à TarifEcolage qui autorise
+// plusieurs lignes, ex. par trimestre) — les frais d'inscription sont un
+// montant unique, pas fractionné.
+model FraisInscriptionNiveau {
+  id              String   @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole    @relation(fields: [ecoleId], references: [id])
+  niveauId        String
+  niveau          Niveau   @relation(fields: [niveauId], references: [id])
+  anneeScolaireId String
+  montant         Decimal  @db.Decimal(12, 2)
+  createdAt       DateTime @default(now())
+
+  @@unique([ecoleId, niveauId, anneeScolaireId])
+  @@index([ecoleId])
+  @@map("frais_inscription_niveau")
+}
+
+model Classe {
+  id              String        @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole         @relation(fields: [ecoleId], references: [id])
+  niveauId        String
+  niveau          Niveau        @relation(fields: [niveauId], references: [id])
+  anneeScolaireId String
+  anneeScolaire   AnneeScolaire @relation(fields: [anneeScolaireId], references: [id])
+  nom             String
+  capaciteMax     Int?
+  actif           Boolean       @default(true)
+
+  inscriptions Inscription[]
+  absences     Absence[]
+  notes        Note[]
+  creneaux     Creneau[]
+
+  @@unique([ecoleId, anneeScolaireId, nom])
+  @@index([ecoleId])
+  @@map("classes")
+}
+
+// ─────────────────────────────────────────────
+// PERSONNEL
+// ─────────────────────────────────────────────
+
+model Personnel {
+  id           String    @id @default(cuid())
+  ecoleId      String
+  ecole        Ecole     @relation(fields: [ecoleId], references: [id])
+  matricule    String?
+  nom          String
+  prenom       String
+  genre        Genre?
+  telephone    String?
+  email        String?
+  fonction     String
+  type         TypePersonnel @default(ADMINISTRATIF)
+  dateEmbauche DateTime?
+  salaireBase  Decimal?  @db.Decimal(12, 2)
+  actif        Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  utilisateur   Utilisateur?
+  creneaux      Creneau[]
+  bulletinsPaie BulletinPaie[]
+
+  @@unique([ecoleId, matricule])
+  @@index([ecoleId])
+  @@map("personnels")
+}
+
+// ─────────────────────────────────────────────
+// ELEVES / FAMILLE
+// ─────────────────────────────────────────────
+
+model Eleve {
+  id            String    @id @default(cuid())
+  ecoleId       String
+  ecole         Ecole     @relation(fields: [ecoleId], references: [id])
+  matricule     String?
+  nom           String
+  prenom        String
+  genre         Genre
+  dateNaissance DateTime?
+  lieuNaissance String?
+  adresse       String?
+  photoUrl      String?
+  actif         Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  inscriptions Inscription[]
+  absences     Absence[]
+  factures     Facture[]
+  parentsLiens EleveParent[]
+  notes        Note[]
+  messages     MessageParent[]
+  demandesInscription DemandeInscription[]
+  emprunts     Emprunt[]
+
+  @@unique([ecoleId, matricule])
+  @@index([ecoleId])
+  @@map("eleves")
+}
+
+model ParentTuteur {
+  id         String   @id @default(cuid())
+  ecoleId    String
+  ecole      Ecole    @relation(fields: [ecoleId], references: [id])
+  nom        String
+  prenom     String
+  telephone  String?
+  email      String?
+  profession String?
+  createdAt  DateTime @default(now())
+
+  elevesLiens EleveParent[]
+  messages    MessageParent[]
+
+  @@index([ecoleId])
+  @@map("parents_tuteurs")
+}
+
+model EleveParent {
+  id               String       @id @default(cuid())
+  eleveId          String
+  eleve            Eleve        @relation(fields: [eleveId], references: [id])
+  parentTuteurId   String
+  parentTuteur     ParentTuteur @relation(fields: [parentTuteurId], references: [id])
+  lien             String
+  contactPrincipal Boolean      @default(false)
+
+  @@unique([eleveId, parentTuteurId])
+  @@index([eleveId])
+  @@map("eleves_parents")
+}
+
+model Inscription {
+  id              String            @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole             @relation(fields: [ecoleId], references: [id])
+  eleveId         String
+  eleve           Eleve             @relation(fields: [eleveId], references: [id])
+  classeId        String
+  classe          Classe            @relation(fields: [classeId], references: [id])
+  anneeScolaireId String
+  anneeScolaire   AnneeScolaire     @relation(fields: [anneeScolaireId], references: [id])
+  dateInscription DateTime          @default(now())
+  statut          StatutInscription @default(EN_COURS)
+
+  @@unique([eleveId, anneeScolaireId])
+  @@index([ecoleId])
+  @@index([classeId])
+  @@map("inscriptions")
+}
+
+// ─────────────────────────────────────────────
+// ABSENCES
+// ─────────────────────────────────────────────
+
+model Absence {
+  id              String        @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole         @relation(fields: [ecoleId], references: [id])
+  eleveId         String
+  eleve           Eleve         @relation(fields: [eleveId], references: [id])
+  classeId        String
+  classe          Classe        @relation(fields: [classeId], references: [id])
+  anneeScolaireId String
+  anneeScolaire   AnneeScolaire @relation(fields: [anneeScolaireId], references: [id])
+  date            DateTime      @db.Date
+  statut          StatutAbsence
+  motif           String?
+  saisieParId     String?
+  createdAt       DateTime      @default(now())
+
+  @@unique([eleveId, date])
+  @@index([classeId, date])
+  @@index([ecoleId])
+  @@map("absences")
+}
+
+// ─────────────────────────────────────────────
+// FINANCES
+// ─────────────────────────────────────────────
+
+model TarifEcolage {
+  id              String   @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole    @relation(fields: [ecoleId], references: [id])
+  niveauId        String
+  niveau          Niveau   @relation(fields: [niveauId], references: [id])
+  anneeScolaireId String
+  libelle         String
+  montant         Decimal  @db.Decimal(12, 2)
+  createdAt       DateTime @default(now())
+
+  @@unique([ecoleId, niveauId, anneeScolaireId, libelle])
+  @@index([ecoleId])
+  @@map("tarifs_ecolage")
+}
+
+model Facture {
+  id              String        @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole         @relation(fields: [ecoleId], references: [id])
+  eleveId         String
+  eleve           Eleve         @relation(fields: [eleveId], references: [id])
+  anneeScolaireId String
+  anneeScolaire   AnneeScolaire @relation(fields: [anneeScolaireId], references: [id])
+  libelle         String
+  type            TypeFacture   @default(ECOLAGE)
+  montantTotal    Decimal       @db.Decimal(12, 2)
+  montantPaye     Decimal       @default(0) @db.Decimal(12, 2)
+  statut          StatutFacture @default(IMPAYEE)
+  dateEcheance    DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  paiements      Paiement[]
+  transactionsMM TransactionMobileMoney[]
+
+  @@index([ecoleId])
+  @@index([eleveId])
+  @@index([statut])
+  @@map("factures")
+}
+
+model Paiement {
+  id           String       @id @default(cuid())
+  ecoleId      String
+  ecole        Ecole        @relation(fields: [ecoleId], references: [id])
+  factureId    String
+  facture      Facture      @relation(fields: [factureId], references: [id])
+  montant      Decimal      @db.Decimal(12, 2)
+  mode         ModePaiement @default(ESPECES)
+  reference    String?
+  datePaiement DateTime     @default(now())
+  saisieParId  String?
+  createdAt    DateTime     @default(now())
+
+  transactionMM TransactionMobileMoney?
+
+  @@index([ecoleId])
+  @@index([factureId])
+  @@map("paiements")
+}
+
+model TransactionMobileMoney {
+  id          String               @id @default(cuid())
+  ecoleId     String
+  ecole       Ecole                @relation(fields: [ecoleId], references: [id])
+  factureId   String
+  facture     Facture              @relation(fields: [factureId], references: [id])
+  paiementId  String?              @unique
+  paiement    Paiement?            @relation(fields: [paiementId], references: [id])
+  operateur   OperateurMobileMoney
+  telephone   String
+  montant     Decimal              @db.Decimal(12, 2)
+  statut      StatutTransaction    @default(EN_ATTENTE)
+  reference   String               @unique
+  initieeParId String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@index([ecoleId, createdAt])
+  @@index([factureId])
+  @@map("transactions_mobile_money")
+}
+
+// ─────────────────────────────────────────────
+// NOTES / BULLETINS
+// ─────────────────────────────────────────────
+
+model Matiere {
+  id          String  @id @default(cuid())
+  ecoleId     String
+  ecole       Ecole   @relation(fields: [ecoleId], references: [id])
+  niveauId    String
+  niveau      Niveau  @relation(fields: [niveauId], references: [id])
+  nom         String
+  coefficient Decimal @db.Decimal(4, 2)
+
+  notes    Note[]
+  creneaux Creneau[]
+
+  @@unique([ecoleId, niveauId, nom])
+  @@index([ecoleId])
+  @@map("matieres")
+}
+
+model Note {
+  id              String   @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole    @relation(fields: [ecoleId], references: [id])
+  eleveId         String
+  eleve           Eleve    @relation(fields: [eleveId], references: [id])
+  classeId        String
+  classe          Classe   @relation(fields: [classeId], references: [id])
+  matiereId       String
+  matiere         Matiere  @relation(fields: [matiereId], references: [id])
+  anneeScolaireId String
+  trimestre       Int
+  valeur          Decimal  @db.Decimal(4, 2)
+  appreciation    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([eleveId, matiereId, anneeScolaireId, trimestre])
+  @@index([classeId, trimestre])
+  @@index([ecoleId])
+  @@map("notes")
+}
+
+// ─────────────────────────────────────────────
+// EMPLOIS DU TEMPS
+// ─────────────────────────────────────────────
+
+model Salle {
+  id       String  @id @default(cuid())
+  ecoleId  String
+  ecole    Ecole   @relation(fields: [ecoleId], references: [id])
+  nom      String
+  capacite Int?
+
+  creneaux Creneau[]
+  materiels Materiel[]
+
+  @@unique([ecoleId, nom])
+  @@index([ecoleId])
+  @@map("salles")
+}
+
+model Creneau {
+  id              String      @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole       @relation(fields: [ecoleId], references: [id])
+  classeId        String
+  classe          Classe      @relation(fields: [classeId], references: [id])
+  matiereId       String
+  matiere         Matiere     @relation(fields: [matiereId], references: [id])
+  personnelId     String?
+  personnel       Personnel?  @relation(fields: [personnelId], references: [id])
+  salleId         String?
+  salle           Salle?      @relation(fields: [salleId], references: [id])
+  anneeScolaireId String
+  jour            JourSemaine
+  heureDebut      String // format "HH:MM"
+  heureFin        String // format "HH:MM"
+  tauxHoraire     Decimal?    @db.Decimal(12, 2)
+  createdAt       DateTime    @default(now())
+
+  @@index([classeId, jour])
+  @@index([personnelId, jour])
+  @@index([salleId, jour])
+  @@index([ecoleId])
+  @@map("creneaux")
+}
+
+// ─────────────────────────────────────────────
+// COMMUNICATION PARENTS
+// ─────────────────────────────────────────────
+
+model MessageParent {
+  id             String        @id @default(cuid())
+  ecoleId        String
+  ecole          Ecole         @relation(fields: [ecoleId], references: [id])
+  eleveId        String?
+  eleve          Eleve?        @relation(fields: [eleveId], references: [id])
+  parentTuteurId String?
+  parentTuteur   ParentTuteur? @relation(fields: [parentTuteurId], references: [id])
+  telephone      String
+  contenu        String
+  type           TypeMessage   @default(MANUEL)
+  statut         StatutMessage @default(EN_ATTENTE)
+  envoyeParId    String?
+  createdAt      DateTime      @default(now())
+
+  @@index([ecoleId, createdAt])
+  @@index([eleveId])
+  @@map("messages_parents")
+}
+
+// ─────────────────────────────────────────────
+// INSCRIPTIONS EN LIGNE (ADMISSIONS)
+// ─────────────────────────────────────────────
+
+model DemandeInscription {
+  id              String                   @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole                    @relation(fields: [ecoleId], references: [id])
+  // Informations élève
+  nomEleve        String
+  prenomEleve     String
+  genre           Genre
+  dateNaissance   DateTime?
+  lieuNaissance   String?
+  // Niveau souhaité (relation optionnelle + texte libre de secours)
+  niveauId        String?
+  niveau          Niveau?                  @relation(fields: [niveauId], references: [id])
+  niveauSouhaite  String?
+  // Informations parent / tuteur
+  nomParent       String
+  prenomParent    String
+  telephoneParent String
+  emailParent     String?
+  // Pièces justificatives (description ; upload de fichiers différé)
+  piecesJointes   String?
+  // Traitement
+  statut          StatutDemandeInscription @default(EN_ATTENTE)
+  motifRefus      String?
+  eleveId         String?
+  eleve           Eleve?                   @relation(fields: [eleveId], references: [id])
+  traiteeParId    String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  documents       DocumentDemande[]
+  annulations     AnnulationAdmission[]
+
+  @@index([ecoleId, statut])
+  @@map("demandes_inscription")
+}
+
+enum TypeAnnulation {
+  ADMISSION
+  REFUS
+}
+
+// Trace chaque annulation (admission acceptée ou refus) : l'élève et ses
+// données peuvent être définitivement supprimés par l'action elle-même, cette
+// ligne est la seule preuve qui subsiste que la décision a été reprise.
+model AnnulationAdmission {
+  id           String              @id @default(cuid())
+  ecoleId      String
+  ecole        Ecole               @relation(fields: [ecoleId], references: [id])
+  demandeId    String
+  demande      DemandeInscription  @relation(fields: [demandeId], references: [id])
+  type         TypeAnnulation
+  nomEleve     String
+  prenomEleve  String
+  detail       String?
+  annuleeParId String?
+  createdAt    DateTime            @default(now())
+
+  @@index([ecoleId, createdAt])
+  @@map("annulations_admission")
+}
+
+model DocumentDemande {
+  id            String                     @id @default(cuid())
+  demandeId     String
+  demande       DemandeInscription         @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+  type          TypeDocument
+  nomFichier    String // nom d'origine fourni par le parent
+  cheminFichier String // nom du fichier stocké sur le disque
+  mimeType      String
+  tailleOctets  Int
+  statut        StatutVerificationDocument @default(EN_ATTENTE)
+  commentaire   String?
+  verifieParId  String?
+  createdAt     DateTime                   @default(now())
+
+  @@index([demandeId])
+  @@map("documents_demande")
+}
+
+// ─────────────────────────────────────────────
+// PAIE DU PERSONNEL
+// ─────────────────────────────────────────────
+
+model BulletinPaie {
+  id            String             @id @default(cuid())
+  ecoleId       String
+  ecole         Ecole              @relation(fields: [ecoleId], references: [id])
+  personnelId   String
+  personnel     Personnel          @relation(fields: [personnelId], references: [id])
+  mois          Int // 1-12
+  annee         Int
+  nombreHeures  Int?
+  totalGains    Decimal            @db.Decimal(12, 2)
+  totalRetenues Decimal            @db.Decimal(12, 2)
+  netAPayer     Decimal            @db.Decimal(12, 2)
+  statut        StatutBulletinPaie @default(BROUILLON)
+  modePaiement  String?
+  creeParId     String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  lignes LigneBulletinPaie[]
+
+  @@unique([personnelId, mois, annee])
+  @@index([ecoleId, annee, mois])
+  @@map("bulletins_paie")
+}
+
+model LigneBulletinPaie {
+  id             String       @id @default(cuid())
+  bulletinPaieId String
+  bulletinPaie   BulletinPaie @relation(fields: [bulletinPaieId], references: [id], onDelete: Cascade)
+  libelle        String
+  imposable      Boolean      @default(false)
+  montantGain    Decimal      @default(0) @db.Decimal(12, 2)
+  montantRetenue Decimal      @default(0) @db.Decimal(12, 2)
+  ordre          Int          @default(0)
+
+  @@index([bulletinPaieId])
+  @@map("lignes_bulletin_paie")
+}
+
+// ─────────────────────────────────────────────
+// LOGISTIQUE / INVENTAIRE DU MATÉRIEL
+// ─────────────────────────────────────────────
+
+model Materiel {
+  id          String            @id @default(cuid())
+  ecoleId     String
+  ecole       Ecole             @relation(fields: [ecoleId], references: [id])
+  categorie   CategorieMateriel
+  designation String
+  quantite    Int               @default(1)
+  etat        EtatMateriel      @default(BON)
+  salleId     String?
+  salle       Salle?            @relation(fields: [salleId], references: [id])
+  description String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([ecoleId, categorie])
+  @@index([salleId])
+  @@map("materiels")
+}
+
+// ─────────────────────────────────────────────
+// MOUVEMENTS FINANCIERS (recettes / dépenses hors écolage & salaires)
+// ─────────────────────────────────────────────
+
+model MouvementFinancier {
+  id           String        @id @default(cuid())
+  ecoleId      String
+  ecole        Ecole         @relation(fields: [ecoleId], references: [id])
+  type         TypeMouvement
+  categorie    String
+  libelle      String
+  montant      Decimal       @db.Decimal(12, 2)
+  date         DateTime
+  modePaiement String?
+  saisieParId  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([ecoleId, date])
+  @@index([ecoleId, type])
+  @@map("mouvements_financiers")
+}
+
+// ─────────────────────────────────────────────
+// BIBLIOTHÈQUE
+// ─────────────────────────────────────────────
+
+model Livre {
+  id             String   @id @default(cuid())
+  ecoleId        String
+  ecole          Ecole    @relation(fields: [ecoleId], references: [id])
+  titre          String
+  auteur         String?
+  isbn           String?
+  categorie      String?
+  quantiteTotale Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  emprunts Emprunt[]
+
+  @@index([ecoleId])
+  @@map("livres")
+}
+
+model Emprunt {
+  id                  String        @id @default(cuid())
+  ecoleId             String
+  ecole               Ecole         @relation(fields: [ecoleId], references: [id])
+  livreId             String
+  livre               Livre         @relation(fields: [livreId], references: [id])
+  eleveId             String
+  eleve               Eleve         @relation(fields: [eleveId], references: [id])
+  dateEmprunt         DateTime      @default(now())
+  dateRetourPrevue    DateTime
+  dateRetourEffective DateTime?
+  statut              StatutEmprunt @default(EN_COURS)
+  createdAt           DateTime      @default(now())
+
+  @@index([ecoleId, statut])
+  @@index([livreId])
+  @@index([eleveId])
+  @@map("emprunts")
+}

@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: kalanso
+      POSTGRES_PASSWORD: kalanso_dev
+      POSTGRES_DB: kalanso
+    ports:
+      - "5433:5432"
+    volumes:
+      - kalanso_pgdata:/var/lib/postgresql/data
+
+volumes:
+  kalanso_pgdata:
