@@ -1,6 +1,12 @@
 import { IsNumber, IsOptional, IsPositive, IsString } from 'class-validator';
 
 export class CreateMatiereDto {
+  // Optionnel : permet à un client hors-ligne de générer l'id à l'avance et de
+  // rejouer la requête sans risque de doublon (voir matieres.service.ts).
+  @IsOptional()
+  @IsString()
+  id?: string;
+
   @IsString()
   niveauId: string;
 

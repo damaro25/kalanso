@@ -8,6 +8,13 @@ export class PaiementsService {
   constructor(private prisma: PrismaService) {}
 
   async create(ecoleId: string, dto: CreatePaiementDto, saisieParId: string) {
+    // Rejeu d'une requête hors-ligne déjà passée (réponse perdue en route) :
+    // on ne recrée pas le paiement, on renvoie celui qui existe déjà.
+    if (dto.id) {
+      const existant = await this.prisma.paiement.findUnique({ where: { id: dto.id } });
+      if (existant) return existant;
+    }
+
     const facture = await this.prisma.facture.findFirstOrThrow({ where: { id: dto.factureId, ecoleId } });
 
     const nouveauMontantPaye = Number(facture.montantPaye) + dto.montant;
@@ -21,6 +28,7 @@ export class PaiementsService {
     const [paiement] = await this.prisma.$transaction([
       this.prisma.paiement.create({
         data: {
+          id: dto.id,
           ecoleId,
           factureId: facture.id,
           montant: dto.montant,

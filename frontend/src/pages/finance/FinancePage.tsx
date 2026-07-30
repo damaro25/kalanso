@@ -262,7 +262,7 @@ export function FinancePage() {
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="libelle" tickFormatter={(v: string) => v.slice(0, 3)} />
             <YAxis tickFormatter={(v: number) => `${v / 1000}k`} />
-            <Tooltip formatter={(v: number) => `${fmt(v)} GNF`} />
+            <Tooltip formatter={(v) => `${fmt(Number(v))} GNF`} />
             <Legend />
             <Bar dataKey="recettes" fill="#2f9e44" name="Recettes" />
             <Bar dataKey="depenses" fill="#e03131" name="Dépenses" />
@@ -335,7 +335,7 @@ export function FinancePage() {
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="libelle" tickFormatter={(v: string) => v.slice(0, 3)} />
             <YAxis tickFormatter={(v: number) => `${v / 1000}k`} />
-            <Tooltip formatter={(v: number) => `${fmt(v)} GNF`} />
+            <Tooltip formatter={(v) => `${fmt(Number(v))} GNF`} />
             <Bar dataKey="montant" fill="#2f9e44" name="Recettes" />
           </BarChart>
         </ResponsiveContainer>
@@ -351,7 +351,7 @@ export function FinancePage() {
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="libelle" tickFormatter={(v: string) => v.slice(0, 3)} />
             <YAxis tickFormatter={(v: number) => `${v / 1000}k`} />
-            <Tooltip formatter={(v: number) => `${fmt(v)} GNF`} />
+            <Tooltip formatter={(v) => `${fmt(Number(v))} GNF`} />
             <Legend />
             <Line type="monotone" dataKey="montant" stroke="#ae3ec9" name="Mensuel" strokeWidth={2} />
             <Line type="monotone" dataKey="cumul" stroke="#7048e8" name="Cumul" strokeWidth={2} />

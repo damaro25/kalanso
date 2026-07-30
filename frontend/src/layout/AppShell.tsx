@@ -26,6 +26,7 @@ import {
 } from '@tabler/icons-react';
 import { useAuth } from '../auth/AuthContext';
 import { ROLE_LABELS, type Role } from '../lib/roles';
+import { SyncStatusBanner } from '../offline/SyncStatusBanner';
 
 type IconComponent = ComponentType<{ size?: number; stroke?: number }>;
 
@@ -194,6 +195,7 @@ export function AppShell() {
       </MantineAppShell.Navbar>
 
       <MantineAppShell.Main>
+        <SyncStatusBanner />
         <Outlet />
       </MantineAppShell.Main>
     </MantineAppShell>

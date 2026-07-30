@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { offlineMutation } from '../offline/offlineMutation';
 
 export interface TarifEcolage {
   id: string;
@@ -115,9 +116,26 @@ export async function createFacture(input: CreateFactureInput): Promise<Facture>
   return data;
 }
 
-export async function createPaiement(input: CreatePaiementInput) {
-  const { data } = await apiClient.post('/paiements', input);
-  return data;
+// createPaiement fait un create() brut côté serveur (pas d'upsert) : id
+// pré-généré côté client + garde-fou d'idempotence dans paiements.service.ts.
+export async function createPaiement(input: CreatePaiementInput): Promise<{ id: string }> {
+  return offlineMutation<CreatePaiementInput, { id: string }>({
+    method: 'POST',
+    url: '/paiements',
+    body: input,
+    entityType: 'Paiement',
+    invalidateKeys: [['factures-impayes']],
+    applyOptimistic: (queryClient, body) => {
+      queryClient.setQueryData<Facture[]>(['factures-impayes'], (prev) =>
+        prev?.map((f) => {
+          if (f.id !== body.factureId) return f;
+          const nouveauMontantPaye = Number(f.montantPaye) + body.montant;
+          const statut: Facture['statut'] = nouveauMontantPaye >= Number(f.montantTotal) ? 'PAYEE' : 'PARTIELLE';
+          return { ...f, montantPaye: String(nouveauMontantPaye), statut };
+        }),
+      );
+    },
+  });
 }
 
 export async function ouvrirRecu(paiementId: string) {

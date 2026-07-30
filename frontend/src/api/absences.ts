@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { offlineMutation } from '../offline/offlineMutation';
 
 export type StatutAbsence = 'PRESENT' | 'ABSENT' | 'RETARD';
 
@@ -17,14 +18,44 @@ export interface AppelEntry {
   motif?: string;
 }
 
+interface EnregistrerAppelBody {
+  classeId: string;
+  date: string;
+  entries: AppelEntry[];
+}
+
 export async function fetchAbsences(classeId: string, date: string): Promise<Absence[]> {
   const { data } = await apiClient.get('/absences', { params: { classeId, date } });
   return data;
 }
 
+// Rejouable sans risque côté serveur (absences.service.ts fait un upsert sur
+// élève+date) : pas besoin de garde-fou d'idempotence pour ce module.
 export async function enregistrerAppel(classeId: string, date: string, entries: AppelEntry[]) {
-  const { data } = await apiClient.post('/absences/appel', { classeId, date, entries });
-  return data;
+  return offlineMutation<EnregistrerAppelBody, Absence[]>({
+    method: 'POST',
+    url: '/absences/appel',
+    body: { classeId, date, entries },
+    entityType: 'Appel du jour',
+    invalidateKeys: [['absences', classeId, date]],
+    applyOptimistic: (queryClient, body) => {
+      const eleves =
+        queryClient.getQueryData<{ id: string; nom: string; prenom: string }[]>(['classe-eleves', body.classeId]) ?? [];
+      const eleveParId = new Map(eleves.map((e) => [e.id, e]));
+      const synthetique: Absence[] = body.entries.map((entry) => {
+        const eleve = eleveParId.get(entry.eleveId);
+        return {
+          id: crypto.randomUUID(),
+          eleveId: entry.eleveId,
+          date: body.date,
+          statut: entry.statut,
+          motif: entry.motif ?? null,
+          eleve: eleve ? { id: eleve.id, nom: eleve.nom, prenom: eleve.prenom } : { id: entry.eleveId, nom: '', prenom: '' },
+        };
+      });
+      queryClient.setQueryData(['absences', body.classeId, body.date], synthetique);
+    },
+  });
 }
 
 export async function fetchAbsencesEleve(eleveId: string) {

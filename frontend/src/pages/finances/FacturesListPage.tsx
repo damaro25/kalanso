@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
-import { Table, Title, Badge, Button, Group, Modal, NumberInput, Select, Stack, Text, TextInput, List } from '@mantine/core';
+import { Table, Title, Badge, Button, Group, Modal, NumberInput, Select, Stack, Text, TextInput, List, Tooltip } from '@mantine/core';
 import { IconSearch, IconEye, IconUpload, IconDownload, IconFileSpreadsheet } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import {
@@ -17,6 +17,7 @@ import {
 import { envoyerRappelImpaye } from '../../api/communication';
 import { initierTransaction, confirmerTransaction, echecTransaction, OPERATEURS, type OperateurMobileMoney } from '../../api/mobileMoney';
 import { correspond } from '../../lib/search';
+import { usePendingIds } from '../../offline/outbox';
 
 const STATUT_COLORS: Record<string, string> = {
   IMPAYEE: 'red',
@@ -28,6 +29,7 @@ const STATUT_COLORS: Record<string, string> = {
 export function FacturesListPage() {
   const queryClient = useQueryClient();
   const { data: factures, isLoading } = useQuery({ queryKey: ['factures-impayes'], queryFn: fetchImpayes });
+  const idsEnAttente = usePendingIds();
   const [recherche, setRecherche] = useState('');
 
   const facturesFiltrees = useMemo(
@@ -251,9 +253,18 @@ export function FacturesListPage() {
             Enregistrer le paiement
           </Button>
           {dernierPaiementId && (
-            <Button variant="light" onClick={() => ouvrirRecu(dernierPaiementId)}>
-              Voir le reçu du dernier paiement
-            </Button>
+            <Tooltip
+              label="Disponible une fois le paiement synchronisé"
+              disabled={!idsEnAttente.has(dernierPaiementId)}
+            >
+              <Button
+                variant="light"
+                disabled={idsEnAttente.has(dernierPaiementId)}
+                onClick={() => ouvrirRecu(dernierPaiementId)}
+              >
+                Voir le reçu du dernier paiement
+              </Button>
+            </Tooltip>
           )}
         </Stack>
       </Modal>

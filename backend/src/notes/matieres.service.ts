@@ -14,9 +14,15 @@ export class MatieresService {
     });
   }
 
-  create(ecoleId: string, dto: CreateMatiereDto) {
+  async create(ecoleId: string, dto: CreateMatiereDto) {
+    // Rejeu d'une requête hors-ligne déjà passée (réponse perdue en route) :
+    // on ne recrée pas la matière, on renvoie celle qui existe déjà.
+    if (dto.id) {
+      const existante = await this.prisma.matiere.findUnique({ where: { id: dto.id }, include: { niveau: true } });
+      if (existante) return existante;
+    }
     return this.prisma.matiere.create({
-      data: { ecoleId, niveauId: dto.niveauId, nom: dto.nom, coefficient: dto.coefficient },
+      data: { id: dto.id, ecoleId, niveauId: dto.niveauId, nom: dto.nom, coefficient: dto.coefficient },
       include: { niveau: true },
     });
   }
