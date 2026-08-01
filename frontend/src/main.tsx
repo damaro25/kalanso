@@ -32,15 +32,25 @@ setQueryClient(queryClient);
 connectivityStore.start();
 initSync();
 
+// Applique la mise à jour automatiquement — un clic manuel sur une notification
+// est trop facile à manquer ou à ignorer, ce qui laissait des utilisateurs
+// bloqués sur une ancienne version après un déploiement. Si l'onglet est déjà
+// en arrière-plan, on actualise tout de suite (personne ne perd de saisie en
+// cours) ; sinon on prévient puis on actualise après un court délai, le temps
+// de finir une action déjà commencée.
 const updateSW = registerSW({
   onNeedRefresh() {
+    if (document.visibilityState === 'hidden') {
+      updateSW(true);
+      return;
+    }
     notifications.show({
-      title: 'Nouvelle version disponible',
-      message: 'Actualisez la page pour appliquer la mise à jour de Kalanso.',
+      title: 'Mise à jour de Kalanso',
+      message: 'Une nouvelle version est disponible, elle va s\'appliquer automatiquement dans quelques secondes.',
       color: 'kalanso',
-      autoClose: false,
-      onClick: () => updateSW(true),
+      autoClose: 6000,
     });
+    setTimeout(() => updateSW(true), 6000);
   },
 });
 
