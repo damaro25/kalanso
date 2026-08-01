@@ -27,6 +27,7 @@ import { PaiePage } from './pages/paie/PaiePage';
 import { LogistiquePage } from './pages/logistique/LogistiquePage';
 import { FinancePage } from './pages/finance/FinancePage';
 import { BibliothequePage } from './pages/bibliotheque/BibliothequePage';
+import { UtilisateursPage } from './pages/utilisateurs/UtilisateursPage';
 
 function App() {
   return (
@@ -65,6 +66,7 @@ function App() {
             <Route path="/paie" element={<PaiePage />} />
             <Route path="/logistique" element={<LogistiquePage />} />
             <Route path="/bibliotheque" element={<BibliothequePage />} />
+            <Route path="/utilisateurs" element={<UtilisateursPage />} />
             <Route path="/finance" element={<FinancePage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
