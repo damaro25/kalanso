@@ -16,6 +16,7 @@ import {
 } from '../../api/finances';
 import { envoyerRappelImpaye } from '../../api/communication';
 import { initierTransaction, confirmerTransaction, echecTransaction, OPERATEURS, type OperateurMobileMoney } from '../../api/mobileMoney';
+import { fetchClasses, fetchClasseEleves } from '../../api/classes';
 import { correspond } from '../../lib/search';
 import { usePendingIds } from '../../offline/outbox';
 
@@ -31,10 +32,25 @@ export function FacturesListPage() {
   const { data: factures, isLoading } = useQuery({ queryKey: ['factures-impayes'], queryFn: fetchImpayes });
   const idsEnAttente = usePendingIds();
   const [recherche, setRecherche] = useState('');
+  const [classeId, setClasseId] = useState<string | null>(null);
+
+  const { data: classes } = useQuery({ queryKey: ['classes'], queryFn: fetchClasses });
+  const { data: elevesClasse } = useQuery({
+    queryKey: ['classe-eleves', classeId],
+    queryFn: () => fetchClasseEleves(classeId!),
+    enabled: !!classeId,
+  });
+  const eleveIdsClasse = useMemo(
+    () => (elevesClasse ? new Set(elevesClasse.map((e) => e.id)) : null),
+    [elevesClasse],
+  );
 
   const facturesFiltrees = useMemo(
-    () => (factures ?? []).filter((f) => correspond([f.eleve.nom, f.eleve.prenom, f.libelle], recherche)),
-    [factures, recherche],
+    () =>
+      (factures ?? [])
+        .filter((f) => correspond([f.eleve.nom, f.eleve.prenom, f.libelle], recherche))
+        .filter((f) => !eleveIdsClasse || eleveIdsClasse.has(f.eleve.id)),
+    [factures, recherche, eleveIdsClasse],
   );
 
   const [factureId, setFactureId] = useState<string | null>(null);
@@ -153,6 +169,14 @@ export function FacturesListPage() {
           onChange={(e) => setRecherche(e.currentTarget.value)}
           maw={420}
         />
+        <Select
+          placeholder="Toutes les classes"
+          data={(classes ?? []).map((c) => ({ value: c.id, label: `${c.nom} (${c.anneeScolaire.libelle})` }))}
+          value={classeId}
+          onChange={setClasseId}
+          clearable
+          w={260}
+        />
         <input ref={fileInputRef} type="file" accept=".xlsx" hidden onChange={onFichierChoisi} />
         <Button
           variant="light"
@@ -180,7 +204,9 @@ export function FacturesListPage() {
       {factures && factures.length === 0 && <Text c="dimmed">Aucune facture impayée.</Text>}
 
       {factures && factures.length > 0 && facturesFiltrees.length === 0 && (
-        <Text c="dimmed">Aucune facture ne correspond à « {recherche} ».</Text>
+        <Text c="dimmed">
+          {recherche ? `Aucune facture ne correspond à « ${recherche} ».` : 'Aucune facture impayée dans cette classe.'}
+        </Text>
       )}
 
       {factures && facturesFiltrees.length > 0 && (
