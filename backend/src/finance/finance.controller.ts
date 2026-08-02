@@ -33,13 +33,13 @@ export class FinanceController {
   }
 
   @Get('recettes-par-mois')
-  recettesParMois(@CurrentUser() user: JwtPayloadUser, @Query('annee') annee?: string) {
-    return this.service.recettesParMois(user.ecoleId, Number(annee ?? new Date().getFullYear()));
+  recettesParMois(@CurrentUser() user: JwtPayloadUser, @Query('anneeScolaireId') anneeScolaireId?: string) {
+    return this.service.recettesParMois(user.ecoleId, anneeScolaireId);
   }
 
   @Get('salaires-par-mois')
-  salairesParMois(@CurrentUser() user: JwtPayloadUser, @Query('annee') annee?: string) {
-    return this.service.salairesParMois(user.ecoleId, Number(annee ?? new Date().getFullYear()));
+  salairesParMois(@CurrentUser() user: JwtPayloadUser, @Query('anneeScolaireId') anneeScolaireId?: string) {
+    return this.service.salairesParMois(user.ecoleId, anneeScolaireId);
   }
 
   @Get('recouvrement-par-classe')
@@ -58,18 +58,18 @@ export class FinanceController {
   }
 
   @Get('compte-resultat-par-mois')
-  compteResultatParMois(@CurrentUser() user: JwtPayloadUser, @Query('annee') annee?: string) {
-    return this.service.compteResultatParMois(user.ecoleId, Number(annee ?? new Date().getFullYear()));
+  compteResultatParMois(@CurrentUser() user: JwtPayloadUser, @Query('anneeScolaireId') anneeScolaireId?: string) {
+    return this.service.compteResultatParMois(user.ecoleId, anneeScolaireId);
   }
 
   @Get('mouvements')
   listMouvements(
     @CurrentUser() user: JwtPayloadUser,
-    @Query('annee') annee?: string,
+    @Query('anneeScolaireId') anneeScolaireId?: string,
     @Query('type') type?: string,
   ) {
     const t = type === 'RECETTE' || type === 'DEPENSE' ? type : undefined;
-    return this.service.listMouvements(user.ecoleId, annee ? Number(annee) : undefined, t);
+    return this.service.listMouvements(user.ecoleId, anneeScolaireId, t);
   }
 
   @Post('mouvements')
@@ -91,14 +91,9 @@ export class FinanceController {
   async exportBilan(
     @CurrentUser() user: JwtPayloadUser,
     @Query('anneeScolaireId') anneeScolaireId: string | undefined,
-    @Query('annee') annee: string | undefined,
     @Res() res: Response,
   ) {
-    const buffer = await this.exportService.bilanXlsx(
-      user.ecoleId,
-      anneeScolaireId,
-      Number(annee ?? new Date().getFullYear()),
-    );
+    const buffer = await this.exportService.bilanXlsx(user.ecoleId, anneeScolaireId);
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': 'attachment; filename="bilan-financier.xlsx"',

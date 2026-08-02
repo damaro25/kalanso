@@ -6,11 +6,11 @@ import { FinanceService } from './finance.service';
 export class FinanceExportService {
   constructor(private finance: FinanceService) {}
 
-  async bilanXlsx(ecoleId: string, anneeScolaireId: string | undefined, annee: number): Promise<Buffer> {
+  async bilanXlsx(ecoleId: string, anneeScolaireId: string | undefined): Promise<Buffer> {
     const [dashboard, recettes, salaires, recouvrement] = await Promise.all([
       this.finance.dashboard(ecoleId, anneeScolaireId),
-      this.finance.recettesParMois(ecoleId, annee),
-      this.finance.salairesParMois(ecoleId, annee),
+      this.finance.recettesParMois(ecoleId, anneeScolaireId),
+      this.finance.salairesParMois(ecoleId, anneeScolaireId),
       this.finance.recouvrementParClasse(ecoleId, anneeScolaireId),
     ]);
 
@@ -49,9 +49,9 @@ export class FinanceExportService {
     s.addRow([]);
     ligne('SALAIRES', '', true);
     ligne(`Masse salariale (${dashboard.moisCourant})`, dashboard.salaires.masseSalarialeMois);
-    ligne(`Masse salariale cumulée (${dashboard.anneeCivile})`, dashboard.salaires.masseSalarialeCumul);
+    ligne(`Masse salariale cumulée (${dashboard.anneeScolaire.libelle})`, dashboard.salaires.masseSalarialeCumul);
     s.addRow([]);
-    ligne('COMPTE DE RÉSULTAT (année civile)', '', true);
+    ligne(`COMPTE DE RÉSULTAT (${dashboard.anneeScolaire.libelle})`, '', true);
     ligne('Écolage encaissé', dashboard.compteResultat.ecolageEncaisse);
     ligne('Inscription encaissée', dashboard.compteResultat.inscriptionEncaisse);
     ligne('Autres recettes', dashboard.compteResultat.autresRecettes);
@@ -63,7 +63,7 @@ export class FinanceExportService {
 
     // --- Recettes par mois ---
     const r = wb.addWorksheet('Recettes par mois');
-    r.addRow([`Recettes encaissées ${recettes.annee}`]).font = { bold: true, size: 12 };
+    r.addRow([`Recettes encaissées — ${recettes.anneeScolaire.libelle}`]).font = { bold: true, size: 12 };
     r.addRow(['Mois', 'Montant (GNF)']).font = { bold: true };
     r.getColumn(1).width = 16;
     r.getColumn(2).width = 18;
@@ -72,7 +72,7 @@ export class FinanceExportService {
 
     // --- Salaires par mois ---
     const sal = wb.addWorksheet('Salaires par mois');
-    sal.addRow([`Masse salariale ${salaires.annee}`]).font = { bold: true, size: 12 };
+    sal.addRow([`Masse salariale — ${salaires.anneeScolaire.libelle}`]).font = { bold: true, size: 12 };
     sal.addRow(['Mois', 'Montant (GNF)', 'Cumul (GNF)']).font = { bold: true };
     sal.getColumn(1).width = 16;
     sal.getColumn(2).width = 18;

@@ -51,8 +51,6 @@ import {
 const CATEGORIES_DEPENSE = ['Loyer', 'Fournitures', 'Équipement', 'Maintenance', 'Eau / Électricité', 'Transport', 'Impôts & taxes', 'Autre'];
 const CATEGORIES_RECETTE = ['Cantine', 'Transport', 'Vente fournitures', 'Don / Subvention', 'Autre'];
 
-const ANNEE = new Date().getFullYear();
-
 function fmt(n: number) {
   return n.toLocaleString('fr-FR');
 }
@@ -80,15 +78,32 @@ export function FinancePage() {
   const [filtreEleves, setFiltreEleves] = useState<'EN_RETARD' | 'A_JOUR'>('EN_RETARD');
 
   const { data: dash, isLoading } = useQuery({ queryKey: ['finance-dashboard'], queryFn: () => fetchFinanceDashboard() });
-  const { data: recettes } = useQuery({ queryKey: ['finance-recettes', ANNEE], queryFn: () => fetchRecettesParMois(ANNEE) });
-  const { data: salaires } = useQuery({ queryKey: ['finance-salaires', ANNEE], queryFn: () => fetchSalairesParMois(ANNEE) });
+  const anneeScolaireId = dash?.anneeScolaire.id;
+  const { data: recettes } = useQuery({
+    queryKey: ['finance-recettes', anneeScolaireId],
+    queryFn: () => fetchRecettesParMois(anneeScolaireId),
+    enabled: !!anneeScolaireId,
+  });
+  const { data: salaires } = useQuery({
+    queryKey: ['finance-salaires', anneeScolaireId],
+    queryFn: () => fetchSalairesParMois(anneeScolaireId),
+    enabled: !!anneeScolaireId,
+  });
   const { data: recouvrement } = useQuery({ queryKey: ['finance-recouvrement'], queryFn: () => fetchRecouvrementParClasse() });
   const { data: eleves } = useQuery({
     queryKey: ['finance-eleves', filtreEleves],
     queryFn: () => fetchElevesFinance(filtreEleves),
   });
-  const { data: cr } = useQuery({ queryKey: ['finance-cr', ANNEE], queryFn: () => fetchCompteResultatParMois(ANNEE) });
-  const { data: mouvements } = useQuery({ queryKey: ['finance-mouvements', ANNEE], queryFn: () => fetchMouvements(ANNEE) });
+  const { data: cr } = useQuery({
+    queryKey: ['finance-cr', anneeScolaireId],
+    queryFn: () => fetchCompteResultatParMois(anneeScolaireId),
+    enabled: !!anneeScolaireId,
+  });
+  const { data: mouvements } = useQuery({
+    queryKey: ['finance-mouvements', anneeScolaireId],
+    queryFn: () => fetchMouvements(anneeScolaireId),
+    enabled: !!anneeScolaireId,
+  });
 
   // Modal ajout de mouvement
   const [modalOuvert, setModalOuvert] = useState(false);
@@ -162,7 +177,7 @@ export function FinancePage() {
           >
             Régénérer les factures manquantes
           </Button>
-          <Button variant="light" leftSection={<IconDownload size={16} stroke={1.5} />} onClick={() => telechargerBilanFinancier(ANNEE)}>
+          <Button variant="light" leftSection={<IconDownload size={16} stroke={1.5} />} onClick={() => telechargerBilanFinancier(anneeScolaireId)}>
             Télécharger le bilan financier
           </Button>
         </Group>
@@ -219,14 +234,14 @@ export function FinancePage() {
       {/* KPIs salaires */}
       <SimpleGrid cols={{ base: 2, md: 3 }}>
         <KpiCard label={`Masse salariale (${dash.moisCourant})`} value={`${fmt(dash.salaires.masseSalarialeMois)} GNF`} color="grape" />
-        <KpiCard label={`Salaires cumulés (${dash.anneeCivile})`} value={`${fmt(dash.salaires.masseSalarialeCumul)} GNF`} color="grape" />
-        <KpiCard label={`Recettes ${ANNEE}`} value={`${fmt(recettes?.total ?? 0)} GNF`} color="green" />
+        <KpiCard label={`Salaires cumulés (${dash.anneeScolaire.libelle})`} value={`${fmt(dash.salaires.masseSalarialeCumul)} GNF`} color="grape" />
+        <KpiCard label={`Recettes ${dash.anneeScolaire.libelle}`} value={`${fmt(recettes?.total ?? 0)} GNF`} color="green" />
       </SimpleGrid>
 
       {/* COMPTE DE RÉSULTAT */}
       <Paper withBorder p="md">
         <Title order={4} mb="sm">
-          Compte de résultat ({ANNEE})
+          Compte de résultat ({dash.anneeScolaire.libelle})
         </Title>
         <SimpleGrid cols={{ base: 1, md: 3 }}>
           <div>
@@ -255,7 +270,7 @@ export function FinancePage() {
       {/* Graphe recettes vs dépenses par mois */}
       <Paper withBorder p="md" h={320}>
         <Title order={4} mb="sm">
-          Recettes vs Dépenses par mois ({ANNEE})
+          Recettes vs Dépenses par mois ({dash.anneeScolaire.libelle})
         </Title>
         <ResponsiveContainer width="100%" height="85%">
           <BarChart data={cr?.parMois ?? []}>
@@ -328,7 +343,7 @@ export function FinancePage() {
       {/* Graphe recettes par mois */}
       <Paper withBorder p="md" h={320}>
         <Title order={4} mb="sm">
-          Recettes encaissées par mois ({ANNEE})
+          Recettes encaissées par mois ({dash.anneeScolaire.libelle})
         </Title>
         <ResponsiveContainer width="100%" height="85%">
           <BarChart data={recettes?.parMois ?? []}>
@@ -344,7 +359,7 @@ export function FinancePage() {
       {/* Graphe salaires par mois + cumul */}
       <Paper withBorder p="md" h={320}>
         <Title order={4} mb="sm">
-          Masse salariale par mois et cumulée ({ANNEE})
+          Masse salariale par mois et cumulée ({dash.anneeScolaire.libelle})
         </Title>
         <ResponsiveContainer width="100%" height="85%">
           <LineChart data={salaires?.parMois ?? []}>

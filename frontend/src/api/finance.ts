@@ -3,7 +3,6 @@ import { apiClient } from './client';
 export interface FinanceDashboard {
   anneeScolaire: { id: string; libelle: string };
   moisCourant: string;
-  anneeCivile: number;
   ecolage: {
     totalFacture: number;
     totalEncaisse: number;
@@ -61,23 +60,23 @@ export interface CreateMouvementInput {
 }
 
 export interface CompteResultatMois {
-  annee: number;
+  anneeScolaire: { id: string; libelle: string };
   totalRecettes: number;
   totalDepenses: number;
   resultatNet: number;
-  parMois: { mois: number; libelle: string; recettes: number; depenses: number; resultat: number }[];
+  parMois: { annee: number; mois: number; libelle: string; recettes: number; depenses: number; resultat: number }[];
 }
 
 export interface RecettesParMois {
-  annee: number;
+  anneeScolaire: { id: string; libelle: string };
   total: number;
-  parMois: { mois: number; libelle: string; montant: number }[];
+  parMois: { annee: number; mois: number; libelle: string; montant: number }[];
 }
 
 export interface SalairesParMois {
-  annee: number;
+  anneeScolaire: { id: string; libelle: string };
   total: number;
-  parMois: { mois: number; libelle: string; montant: number; cumul: number }[];
+  parMois: { annee: number; mois: number; libelle: string; montant: number; cumul: number }[];
 }
 
 export interface RecouvrementClasse {
@@ -108,13 +107,13 @@ export async function fetchFinanceDashboard(anneeScolaireId?: string): Promise<F
   return data;
 }
 
-export async function fetchRecettesParMois(annee: number): Promise<RecettesParMois> {
-  const { data } = await apiClient.get('/finance/recettes-par-mois', { params: { annee } });
+export async function fetchRecettesParMois(anneeScolaireId?: string): Promise<RecettesParMois> {
+  const { data } = await apiClient.get('/finance/recettes-par-mois', { params: anneeScolaireId ? { anneeScolaireId } : {} });
   return data;
 }
 
-export async function fetchSalairesParMois(annee: number): Promise<SalairesParMois> {
-  const { data } = await apiClient.get('/finance/salaires-par-mois', { params: { annee } });
+export async function fetchSalairesParMois(anneeScolaireId?: string): Promise<SalairesParMois> {
+  const { data } = await apiClient.get('/finance/salaires-par-mois', { params: anneeScolaireId ? { anneeScolaireId } : {} });
   return data;
 }
 
@@ -135,13 +134,15 @@ export async function fetchElevesFinance(
   return data;
 }
 
-export async function fetchCompteResultatParMois(annee: number): Promise<CompteResultatMois> {
-  const { data } = await apiClient.get('/finance/compte-resultat-par-mois', { params: { annee } });
+export async function fetchCompteResultatParMois(anneeScolaireId?: string): Promise<CompteResultatMois> {
+  const { data } = await apiClient.get('/finance/compte-resultat-par-mois', { params: anneeScolaireId ? { anneeScolaireId } : {} });
   return data;
 }
 
-export async function fetchMouvements(annee?: number, type?: TypeMouvement): Promise<Mouvement[]> {
-  const { data } = await apiClient.get('/finance/mouvements', { params: { ...(annee ? { annee } : {}), ...(type ? { type } : {}) } });
+export async function fetchMouvements(anneeScolaireId?: string, type?: TypeMouvement): Promise<Mouvement[]> {
+  const { data } = await apiClient.get('/finance/mouvements', {
+    params: { ...(anneeScolaireId ? { anneeScolaireId } : {}), ...(type ? { type } : {}) },
+  });
   return data;
 }
 
@@ -165,8 +166,11 @@ export async function regenererFactures(): Promise<RegenererFacturesResult> {
   return data;
 }
 
-export async function telechargerBilanFinancier(annee: number) {
-  const response = await apiClient.get('/finance/export/bilan.xlsx', { params: { annee }, responseType: 'blob' });
+export async function telechargerBilanFinancier(anneeScolaireId?: string) {
+  const response = await apiClient.get('/finance/export/bilan.xlsx', {
+    params: anneeScolaireId ? { anneeScolaireId } : {},
+    responseType: 'blob',
+  });
   const url = window.URL.createObjectURL(new Blob([response.data]));
   const link = document.createElement('a');
   link.href = url;

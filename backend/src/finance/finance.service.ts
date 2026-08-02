@@ -24,6 +24,31 @@ export class FinanceService {
     return derniere;
   }
 
+  // Bornes [début, fin exclusive) de l'année scolaire, pour filtrer les
+  // enregistrements horodatés (paiements, mouvements).
+  private plageAnnee(annee: { dateDebut: Date; dateFin: Date }) {
+    const debut = new Date(annee.dateDebut);
+    const fin = new Date(annee.dateFin);
+    fin.setDate(fin.getDate() + 1); // inclut toute la dernière journée
+    return { debut, fin };
+  }
+
+  // Liste chronologique des mois (mois civil + année civile) couverts par
+  // l'année scolaire — utile car elle chevauche deux années civiles (ex:
+  // Octobre 2026 à Juillet 2027) et ses mois ne sont donc pas Janvier-Décembre.
+  private moisDeAnnee(annee: { dateDebut: Date; dateFin: Date }) {
+    const debut = new Date(annee.dateDebut);
+    const finMois = new Date(annee.dateFin);
+    const mois: { annee: number; mois: number; libelle: string }[] = [];
+    let cur = new Date(debut.getFullYear(), debut.getMonth(), 1);
+    const limite = new Date(finMois.getFullYear(), finMois.getMonth(), 1);
+    while (cur <= limite) {
+      mois.push({ annee: cur.getFullYear(), mois: cur.getMonth() + 1, libelle: MOIS_LABELS[cur.getMonth()] });
+      cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    }
+    return mois;
+  }
+
   // Tableau de bord financier global du fondateur.
   async dashboard(ecoleId: string, anneeScolaireId?: string) {
     const annee = await this.resoudreAnnee(ecoleId, anneeScolaireId);
@@ -71,25 +96,28 @@ export class FinanceService {
 
     const tauxRecouvrement = totalFacture > 0 ? (totalEncaisse / totalFacture) * 100 : 0;
 
-    // Salaires : mois courant et cumul de l'année civile courante
+    // Salaires : mois civil courant, et cumul sur toute l'année scolaire
     const maintenant = new Date();
     const moisCourant = maintenant.getMonth() + 1;
-    const anneeCivile = maintenant.getFullYear();
+    const anneeCivileCourante = maintenant.getFullYear();
+    const moisAnneeScolaire = this.moisDeAnnee(annee);
 
     // Seuls les bulletins validés (non brouillon) comptent comme dépense réelle :
     // un brouillon reste modifiable/supprimable, ce n'est pas encore un engagement
     // financier confirmé (même logique que les factures vs paiements des élèves).
-    const bulletinsAnnee = await this.prisma.bulletinPaie.findMany({
-      where: { ecoleId, annee: anneeCivile, statut: { not: 'BROUILLON' } },
-    });
-    const masseSalarialeMois = bulletinsAnnee
-      .filter((b) => b.mois === moisCourant)
-      .reduce((a, b) => a + Number(b.netAPayer), 0);
-    const masseSalarialeCumul = bulletinsAnnee.reduce((a, b) => a + Number(b.netAPayer), 0);
+    const [bulletinsMoisCourant, bulletinsAnneeScolaire] = await Promise.all([
+      this.prisma.bulletinPaie.findMany({
+        where: { ecoleId, annee: anneeCivileCourante, mois: moisCourant, statut: { not: 'BROUILLON' } },
+      }),
+      this.prisma.bulletinPaie.findMany({
+        where: { ecoleId, statut: { not: 'BROUILLON' }, OR: moisAnneeScolaire.map((m) => ({ annee: m.annee, mois: m.mois })) },
+      }),
+    ]);
+    const masseSalarialeMois = bulletinsMoisCourant.reduce((a, b) => a + Number(b.netAPayer), 0);
+    const masseSalarialeCumul = bulletinsAnneeScolaire.reduce((a, b) => a + Number(b.netAPayer), 0);
 
-    // Compte de résultat (trésorerie, année civile courante)
-    const debut = new Date(anneeCivile, 0, 1);
-    const fin = new Date(anneeCivile + 1, 0, 1);
+    // Compte de résultat (trésorerie, année scolaire)
+    const { debut, fin } = this.plageAnnee(annee);
 
     const paiementsAnnee = await this.prisma.paiement.findMany({
       where: { ecoleId, datePaiement: { gte: debut, lt: fin } },
@@ -120,7 +148,6 @@ export class FinanceService {
     return {
       anneeScolaire: { id: annee.id, libelle: annee.libelle },
       moisCourant: MOIS_LABELS[moisCourant - 1],
-      anneeCivile,
       ecolage: {
         totalFacture,
         totalEncaisse,
@@ -179,11 +206,11 @@ export class FinanceService {
     });
   }
 
-  listMouvements(ecoleId: string, annee?: number, type?: 'RECETTE' | 'DEPENSE') {
-    const where: any = { ecoleId, type };
-    if (annee) {
-      where.date = { gte: new Date(annee, 0, 1), lt: new Date(annee + 1, 0, 1) };
-    }
+  async listMouvements(ecoleId: string, anneeScolaireId?: string, type?: 'RECETTE' | 'DEPENSE') {
+    const annee = await this.resoudreAnnee(ecoleId, anneeScolaireId);
+    const { debut, fin } = this.plageAnnee(annee);
+    const where: any = { ecoleId, date: { gte: debut, lt: fin } };
+    if (type) where.type = type;
     return this.prisma.mouvementFinancier.findMany({ where, orderBy: { date: 'desc' } });
   }
 
@@ -193,76 +220,93 @@ export class FinanceService {
     return this.prisma.mouvementFinancier.delete({ where: { id } });
   }
 
-  // Compte de résultat mensuel (année civile) : recettes vs dépenses.
-  async compteResultatParMois(ecoleId: string, annee: number) {
-    const debut = new Date(annee, 0, 1);
-    const fin = new Date(annee + 1, 0, 1);
+  // Compte de résultat mensuel (année scolaire) : recettes vs dépenses.
+  async compteResultatParMois(ecoleId: string, anneeScolaireId?: string) {
+    const annee = await this.resoudreAnnee(ecoleId, anneeScolaireId);
+    const { debut, fin } = this.plageAnnee(annee);
+    const moisListe = this.moisDeAnnee(annee);
 
     const [paiements, bulletins, mouvements] = await Promise.all([
       this.prisma.paiement.findMany({ where: { ecoleId, datePaiement: { gte: debut, lt: fin } }, select: { montant: true, datePaiement: true } }),
       this.prisma.bulletinPaie.findMany({
-        where: { ecoleId, annee, statut: { not: 'BROUILLON' } },
-        select: { mois: true, netAPayer: true },
+        where: { ecoleId, statut: { not: 'BROUILLON' }, OR: moisListe.map((m) => ({ annee: m.annee, mois: m.mois })) },
+        select: { mois: true, annee: true, netAPayer: true },
       }),
       this.prisma.mouvementFinancier.findMany({ where: { ecoleId, date: { gte: debut, lt: fin } }, select: { type: true, montant: true, date: true } }),
     ]);
 
-    const parMois = Array.from({ length: 12 }, (_, i) => ({
-      mois: i + 1,
-      libelle: MOIS_LABELS[i],
-      recettes: 0,
-      depenses: 0,
-      resultat: 0,
-    }));
+    const parMois = moisListe.map((m) => ({ ...m, recettes: 0, depenses: 0, resultat: 0 }));
+    const index = new Map(parMois.map((l, i) => [`${l.annee}-${l.mois}`, i]));
 
-    for (const p of paiements) parMois[p.datePaiement.getMonth()].recettes += Number(p.montant);
-    for (const b of bulletins) parMois[b.mois - 1].depenses += Number(b.netAPayer);
+    for (const p of paiements) {
+      const i = index.get(`${p.datePaiement.getFullYear()}-${p.datePaiement.getMonth() + 1}`);
+      if (i !== undefined) parMois[i].recettes += Number(p.montant);
+    }
+    for (const b of bulletins) {
+      const i = index.get(`${b.annee}-${b.mois}`);
+      if (i !== undefined) parMois[i].depenses += Number(b.netAPayer);
+    }
     for (const m of mouvements) {
-      const idx = m.date.getMonth();
-      if (m.type === 'RECETTE') parMois[idx].recettes += Number(m.montant);
-      else parMois[idx].depenses += Number(m.montant);
+      const i = index.get(`${m.date.getFullYear()}-${m.date.getMonth() + 1}`);
+      if (i === undefined) continue;
+      if (m.type === 'RECETTE') parMois[i].recettes += Number(m.montant);
+      else parMois[i].depenses += Number(m.montant);
     }
     for (const l of parMois) l.resultat = l.recettes - l.depenses;
 
     const totalRecettes = parMois.reduce((a, l) => a + l.recettes, 0);
     const totalDepenses = parMois.reduce((a, l) => a + l.depenses, 0);
-    return { annee, totalRecettes, totalDepenses, resultatNet: totalRecettes - totalDepenses, parMois };
+    return {
+      anneeScolaire: { id: annee.id, libelle: annee.libelle },
+      totalRecettes,
+      totalDepenses,
+      resultatNet: totalRecettes - totalDepenses,
+      parMois,
+    };
   }
 
-  // Recettes encaissées par mois (année civile), basées sur les paiements.
-  async recettesParMois(ecoleId: string, annee: number) {
-    const debut = new Date(annee, 0, 1);
-    const fin = new Date(annee + 1, 0, 1);
+  // Recettes encaissées par mois (année scolaire), basées sur les paiements.
+  async recettesParMois(ecoleId: string, anneeScolaireId?: string) {
+    const annee = await this.resoudreAnnee(ecoleId, anneeScolaireId);
+    const { debut, fin } = this.plageAnnee(annee);
+    const moisListe = this.moisDeAnnee(annee);
     const paiements = await this.prisma.paiement.findMany({
       where: { ecoleId, datePaiement: { gte: debut, lt: fin } },
-      select: { montant: true, datePaiement: true, mode: true },
+      select: { montant: true, datePaiement: true },
     });
 
-    const parMois = Array.from({ length: 12 }, (_, i) => ({ mois: i + 1, libelle: MOIS_LABELS[i], montant: 0 }));
+    const parMois = moisListe.map((m) => ({ ...m, montant: 0 }));
+    const index = new Map(parMois.map((l, i) => [`${l.annee}-${l.mois}`, i]));
     let total = 0;
     for (const p of paiements) {
-      const m = p.datePaiement.getMonth();
-      parMois[m].montant += Number(p.montant);
+      const i = index.get(`${p.datePaiement.getFullYear()}-${p.datePaiement.getMonth() + 1}`);
+      if (i === undefined) continue;
+      parMois[i].montant += Number(p.montant);
       total += Number(p.montant);
     }
-    return { annee, total, parMois };
+    return { anneeScolaire: { id: annee.id, libelle: annee.libelle }, total, parMois };
   }
 
-  // Masse salariale par mois + cumul (année civile). Brouillons exclus (voir dashboard()).
-  async salairesParMois(ecoleId: string, annee: number) {
+  // Masse salariale par mois + cumul (année scolaire). Brouillons exclus (voir dashboard()).
+  async salairesParMois(ecoleId: string, anneeScolaireId?: string) {
+    const annee = await this.resoudreAnnee(ecoleId, anneeScolaireId);
+    const moisListe = this.moisDeAnnee(annee);
     const bulletins = await this.prisma.bulletinPaie.findMany({
-      where: { ecoleId, annee, statut: { not: 'BROUILLON' } },
+      where: { ecoleId, statut: { not: 'BROUILLON' }, OR: moisListe.map((m) => ({ annee: m.annee, mois: m.mois })) },
     });
-    const parMois = Array.from({ length: 12 }, (_, i) => ({ mois: i + 1, libelle: MOIS_LABELS[i], montant: 0, cumul: 0 }));
+
+    const parMois = moisListe.map((m) => ({ ...m, montant: 0, cumul: 0 }));
+    const index = new Map(parMois.map((l, i) => [`${l.annee}-${l.mois}`, i]));
     for (const b of bulletins) {
-      parMois[b.mois - 1].montant += Number(b.netAPayer);
+      const i = index.get(`${b.annee}-${b.mois}`);
+      if (i !== undefined) parMois[i].montant += Number(b.netAPayer);
     }
     let cumul = 0;
     for (const ligne of parMois) {
       cumul += ligne.montant;
       ligne.cumul = cumul;
     }
-    return { annee, total: cumul, parMois };
+    return { anneeScolaire: { id: annee.id, libelle: annee.libelle }, total: cumul, parMois };
   }
 
   // Recouvrement de l'écolage par classe.
