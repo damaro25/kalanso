@@ -51,8 +51,8 @@ export function DashboardPage() {
         <StatCard label="Élèves" value={String(data.totalEleves)} />
         <StatCard label="Personnel" value={String(data.totalPersonnel)} />
         <StatCard
-          label="Paiements du mois"
-          value={`${data.paiementsDuMois.montant.toLocaleString('fr-FR')} GNF`}
+          label="Frais d'inscription"
+          value={`${data.fraisInscription.encaisse.toLocaleString('fr-FR')} GNF`}
           color="green"
         />
         <StatCard

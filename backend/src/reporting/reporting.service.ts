@@ -15,22 +15,17 @@ export class ReportingService {
   }
 
   async dashboard(ecoleId: string) {
-    const debutMois = new Date();
-    debutMois.setDate(1);
-    debutMois.setHours(0, 0, 0, 0);
-
     const aujourdhui = new Date();
     aujourdhui.setHours(0, 0, 0, 0);
 
     const anneeCourante = await this.resoudreAnnee(ecoleId);
 
-    const [totalEleves, totalPersonnel, paiementsDuMois, impayes, absencesDuJour] = await Promise.all([
+    const [totalEleves, totalPersonnel, facturesInscription, impayes, absencesDuJour] = await Promise.all([
       this.prisma.inscription.count({ where: { ecoleId, anneeScolaireId: anneeCourante.id, statut: 'EN_COURS' } }),
       this.prisma.personnel.count({ where: { ecoleId, actif: true } }),
-      this.prisma.paiement.aggregate({
-        where: { ecoleId, datePaiement: { gte: debutMois } },
-        _sum: { montant: true },
-        _count: true,
+      this.prisma.facture.findMany({
+        where: { ecoleId, anneeScolaireId: anneeCourante.id, type: 'INSCRIPTION', statut: { not: 'ANNULEE' } },
+        select: { montantPaye: true },
       }),
       this.prisma.facture.findMany({
         where: { ecoleId, anneeScolaireId: anneeCourante.id, statut: { in: ['IMPAYEE', 'PARTIELLE'] } },
@@ -38,15 +33,15 @@ export class ReportingService {
       this.prisma.absence.findMany({ where: { ecoleId, date: aujourdhui } }),
     ]);
 
+    const fraisInscriptionEncaisse = facturesInscription.reduce((acc, f) => acc + Number(f.montantPaye), 0);
     const impayesMontant = impayes.reduce((acc, f) => acc + (Number(f.montantTotal) - Number(f.montantPaye)), 0);
 
     return {
       anneeScolaire: { id: anneeCourante.id, libelle: anneeCourante.libelle },
       totalEleves,
       totalPersonnel,
-      paiementsDuMois: {
-        montant: Number(paiementsDuMois._sum.montant ?? 0),
-        nombre: paiementsDuMois._count,
+      fraisInscription: {
+        encaisse: fraisInscriptionEncaisse,
       },
       impayes: {
         nombre: impayes.length,

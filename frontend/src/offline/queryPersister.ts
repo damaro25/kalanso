@@ -20,4 +20,4 @@ export const queryPersister = createAsyncStoragePersister({
 // À incrémenter quand une évolution de DTO/forme de donnée rendrait un cache
 // persistant plus ancien incompatible (invalide le cache existant au prochain
 // chargement plutôt que de risquer d'afficher une donnée dans un format obsolète).
-export const QUERY_CACHE_BUSTER = 'kalanso-offline-v2';
+export const QUERY_CACHE_BUSTER = 'kalanso-offline-v3';
