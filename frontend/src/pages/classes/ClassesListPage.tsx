@@ -1,11 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useMemo, useState } from 'react';
-import { Table, Title, Group, Anchor, Paper, TextInput, Select, Button, Stack, Text, SimpleGrid, Badge } from '@mantine/core';
+import { Table, Title, Group, Anchor, Paper, TextInput, NumberInput, Select, Button, Stack, Text, SimpleGrid, Badge, Modal, Tooltip } from '@mantine/core';
 import { IconSearch } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
-import { fetchEffectifs, fetchNiveaux, fetchAnneesScolaires, createClasse, createAnneeScolaire, activerAnneeScolaire } from '../../api/classes';
+import {
+  fetchEffectifs,
+  fetchNiveaux,
+  fetchAnneesScolaires,
+  createClasse,
+  updateClasse,
+  deleteClasse,
+  createAnneeScolaire,
+  activerAnneeScolaire,
+  type Effectif,
+} from '../../api/classes';
 import { correspond } from '../../lib/search';
+import { confirmerSuppression } from '../../lib/confirm';
 
 export function ClassesListPage() {
   const queryClient = useQueryClient();
@@ -65,6 +76,50 @@ export function ClassesListPage() {
     onError: (error: any) =>
       notifications.show({ message: error?.response?.data?.message ?? "Erreur lors de l'activation", color: 'red' }),
   });
+
+  // Édition d'une classe existante
+  const [classeEnEdition, setClasseEnEdition] = useState<Effectif | null>(null);
+  const [nomEdition, setNomEdition] = useState('');
+  const [capaciteEdition, setCapaciteEdition] = useState<number | ''>('');
+
+  function ouvrirEdition(e: Effectif) {
+    setClasseEnEdition(e);
+    setNomEdition(e.nom);
+    setCapaciteEdition(e.capaciteMax ?? '');
+  }
+
+  const editionMutation = useMutation({
+    mutationFn: () =>
+      updateClasse(classeEnEdition!.classeId, {
+        nom: nomEdition,
+        capaciteMax: capaciteEdition === '' ? undefined : Number(capaciteEdition),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['effectifs'] });
+      notifications.show({ message: 'Classe modifiée', color: 'green' });
+      setClasseEnEdition(null);
+    },
+    onError: (error: any) =>
+      notifications.show({ message: error?.response?.data?.message ?? 'Erreur lors de la modification', color: 'red' }),
+  });
+
+  const suppressionMutation = useMutation({
+    mutationFn: (id: string) => deleteClasse(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['effectifs'] });
+      notifications.show({ message: 'Classe supprimée', color: 'green' });
+    },
+    onError: (error: any) =>
+      notifications.show({ message: error?.response?.data?.message ?? 'Erreur lors de la suppression', color: 'red' }),
+  });
+
+  function demanderSuppression(e: Effectif) {
+    confirmerSuppression({
+      titre: 'Supprimer la classe',
+      message: `Supprimer définitivement la classe "${e.nom}" ? Cette action est irréversible.`,
+      onConfirm: () => suppressionMutation.mutate(e.classeId),
+    });
+  }
 
   return (
     <Stack>
@@ -211,15 +266,46 @@ export function ClassesListPage() {
                 <Table.Td>{e.garcons}</Table.Td>
                 <Table.Td>{e.total}</Table.Td>
                 <Table.Td>
-                  <Anchor component={Link} to={`/classes/${e.classeId}`}>
-                    Voir les élèves
-                  </Anchor>
+                  <Group gap="md" wrap="nowrap">
+                    <Anchor component={Link} to={`/classes/${e.classeId}`}>
+                      Voir les élèves
+                    </Anchor>
+                    <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEdition(e)}>
+                      Modifier
+                    </Anchor>
+                    <Tooltip label="Impossible : des élèves sont inscrits dans cette classe" disabled={e.total === 0}>
+                      <Anchor
+                        component="button"
+                        type="button"
+                        size="sm"
+                        c={e.total === 0 ? 'red' : 'dimmed'}
+                        onClick={() => e.total === 0 && demanderSuppression(e)}
+                        style={e.total > 0 ? { cursor: 'not-allowed' } : undefined}
+                      >
+                        Supprimer
+                      </Anchor>
+                    </Tooltip>
+                  </Group>
                 </Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
         </Table>
       )}
+
+      <Modal opened={!!classeEnEdition} onClose={() => setClasseEnEdition(null)} title="Modifier la classe">
+        <Stack>
+          <TextInput label="Nom" value={nomEdition} onChange={(e) => setNomEdition(e.currentTarget.value)} />
+          <NumberInput
+            label="Capacité maximale (optionnel)"
+            value={capaciteEdition}
+            onChange={(v) => setCapaciteEdition(v === '' ? '' : Number(v))}
+          />
+          <Button disabled={!nomEdition} loading={editionMutation.isPending} onClick={() => editionMutation.mutate()}>
+            Enregistrer
+          </Button>
+        </Stack>
+      </Modal>
     </Stack>
   );
 }

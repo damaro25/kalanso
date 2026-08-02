@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateClasseDto, UpdateClasseDto } from './dto/classe.dto';
 
@@ -29,6 +29,25 @@ export class ClassesService {
   async update(ecoleId: string, id: string, dto: UpdateClasseDto) {
     await this.prisma.classe.findFirstOrThrow({ where: { id, ecoleId } });
     return this.prisma.classe.update({ where: { id }, data: dto });
+  }
+
+  // Suppression définitive, autorisée uniquement si aucun élève n'a jamais
+  // été inscrit dans cette classe (notes/absences ne peuvent pas exister sans
+  // inscription, donc ce seul contrôle suffit). Les créneaux d'emploi du temps
+  // ne sont que des cases horaires planifiées, pas des enregistrements
+  // historiques : ils sont supprimés avec la classe sans risque.
+  async remove(ecoleId: string, id: string) {
+    await this.prisma.classe.findFirstOrThrow({ where: { id, ecoleId } });
+
+    const nbInscriptions = await this.prisma.inscription.count({ where: { classeId: id } });
+    if (nbInscriptions > 0) {
+      throw new BadRequestException("Cette classe a des élèves inscrits (actuels ou passés), suppression impossible.");
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.creneau.deleteMany({ where: { classeId: id } });
+      return tx.classe.delete({ where: { id } });
+    });
   }
 
   async eleves(ecoleId: string, classeId: string) {
@@ -71,6 +90,7 @@ export class ClassesService {
       const ecolage = ecolageParNiveauEtAnnee.get(`${classe.niveauId}:${classe.anneeScolaireId}`) ?? 0;
       return {
         classeId: classe.id,
+        capaciteMax: classe.capaciteMax,
         nom: classe.nom,
         niveau: classe.niveau.nom,
         anneeScolaire: classe.anneeScolaire.libelle,

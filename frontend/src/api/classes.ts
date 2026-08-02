@@ -25,6 +25,7 @@ export interface Classe {
 export interface Effectif {
   classeId: string;
   nom: string;
+  capaciteMax: number | null;
   niveau: string;
   anneeScolaire: string;
   fraisInscription: string;
@@ -65,6 +66,20 @@ export async function fetchClasseEleves(classeId: string) {
 export async function createClasse(input: CreateClasseInput): Promise<Classe> {
   const { data } = await apiClient.post('/classes', input);
   return data;
+}
+
+export interface UpdateClasseInput {
+  nom?: string;
+  capaciteMax?: number;
+}
+
+export async function updateClasse(id: string, input: UpdateClasseInput): Promise<Classe> {
+  const { data } = await apiClient.patch(`/classes/${id}`, input);
+  return data;
+}
+
+export async function deleteClasse(id: string): Promise<void> {
+  await apiClient.delete(`/classes/${id}`);
 }
 
 export interface CreateNiveauInput {
