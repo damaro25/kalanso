@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Table, Title, Button, Group, Badge, Anchor, TextInput, Text, Select } from '@mantine/core';
-import { IconSearch } from '@tabler/icons-react';
+import { IconSearch, IconDownload } from '@tabler/icons-react';
 import { fetchEleves } from '../../api/eleves';
 import { fetchClasses, fetchClasseEleves } from '../../api/classes';
+import { telechargerExportEleves } from '../../api/reporting';
 import { correspond } from '../../lib/search';
 
 export function ElevesListPage() {
@@ -29,9 +30,18 @@ export function ElevesListPage() {
     <>
       <Group justify="space-between" mb="md">
         <Title order={2}>Élèves</Title>
-        <Button component={Link} to="/admissions">
-          Nouvel élève (via Admissions)
-        </Button>
+        <Group>
+          <Button
+            variant="light"
+            leftSection={<IconDownload size={16} stroke={1.5} />}
+            onClick={() => telechargerExportEleves(classeId ?? undefined)}
+          >
+            Exporter (Excel)
+          </Button>
+          <Button component={Link} to="/admissions">
+            Nouvel élève (via Admissions)
+          </Button>
+        </Group>
       </Group>
 
       <Group mb="md">

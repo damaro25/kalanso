@@ -62,10 +62,10 @@ export class ExportService {
     return derniere;
   }
 
-  async elevesXlsx(ecoleId: string): Promise<Buffer> {
+  async elevesXlsx(ecoleId: string, classeId?: string): Promise<Buffer> {
     const anneeCourante = await this.resoudreAnnee(ecoleId);
     const inscriptions = await this.prisma.inscription.findMany({
-      where: { ecoleId, anneeScolaireId: anneeCourante.id, statut: 'EN_COURS' },
+      where: { ecoleId, anneeScolaireId: anneeCourante.id, statut: 'EN_COURS', ...(classeId ? { classeId } : {}) },
       include: { eleve: true, classe: true },
       orderBy: { eleve: { nom: 'asc' } },
     });

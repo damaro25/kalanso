@@ -21,8 +21,12 @@ export class ReportingController {
   }
 
   @Get('export/eleves.xlsx')
-  async exportEleves(@CurrentUser() user: JwtPayloadUser, @Res() res: Response) {
-    const buffer = await this.exportService.elevesXlsx(user.ecoleId);
+  async exportEleves(
+    @CurrentUser() user: JwtPayloadUser,
+    @Query('classeId') classeId: string | undefined,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.exportService.elevesXlsx(user.ecoleId, classeId);
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': 'attachment; filename="eleves.xlsx"',

@@ -14,8 +14,11 @@ export async function fetchDashboard(): Promise<DashboardData> {
   return data;
 }
 
-export async function telechargerExportEleves() {
-  const response = await apiClient.get('/reporting/export/eleves.xlsx', { responseType: 'blob' });
+export async function telechargerExportEleves(classeId?: string) {
+  const response = await apiClient.get('/reporting/export/eleves.xlsx', {
+    params: classeId ? { classeId } : {},
+    responseType: 'blob',
+  });
   const url = window.URL.createObjectURL(new Blob([response.data]));
   const link = document.createElement('a');
   link.href = url;
