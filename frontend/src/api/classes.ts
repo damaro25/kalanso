@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import type { Eleve } from './eleves';
 
 export interface Niveau {
   id: string;
@@ -58,7 +59,7 @@ export async function fetchEffectifs(): Promise<Effectif[]> {
   return data;
 }
 
-export async function fetchClasseEleves(classeId: string) {
+export async function fetchClasseEleves(classeId: string): Promise<Eleve[]> {
   const { data } = await apiClient.get(`/classes/${classeId}/eleves`);
   return data;
 }
