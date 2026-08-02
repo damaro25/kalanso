@@ -11,13 +11,11 @@ import { telechargerExportParcours } from '../../api/reporting';
 const DECISION_COLORS: Record<Decision, string> = {
   ADMIS: 'green',
   REDOUBLE: 'red',
-  INDETERMINEE: 'gray',
 };
 
 const DECISION_LABELS: Record<Decision, string> = {
   ADMIS: 'Passage classe sup.',
   REDOUBLE: 'Redouble',
-  INDETERMINEE: 'Données insuffisantes',
 };
 
 function formatMoyenne(m: number | null): string {

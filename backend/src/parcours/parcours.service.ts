@@ -7,10 +7,9 @@ import { ValiderPassageDto } from './dto/parcours.dto';
 // Barème de passage : moyenne annuelle >= 5/10 (les notes Kalanso sont plafonnées à 10).
 export const SEUIL_PASSAGE = 5;
 
-export type Decision = 'ADMIS' | 'REDOUBLE' | 'INDETERMINEE';
+export type Decision = 'ADMIS' | 'REDOUBLE';
 
-function decider(moyenneAnnuelle: number | null): Decision {
-  if (moyenneAnnuelle === null) return 'INDETERMINEE';
+function decider(moyenneAnnuelle: number): Decision {
   return moyenneAnnuelle >= SEUIL_PASSAGE ? 'ADMIS' : 'REDOUBLE';
 }
 
@@ -56,11 +55,9 @@ export class ParcoursService {
           );
         }
 
-        const trimestresRenseignes = moyennesTrimestre.filter((m): m is number => m !== null);
-        const moyenneAnnuelle =
-          trimestresRenseignes.length === 0
-            ? null
-            : trimestresRenseignes.reduce((acc, m) => acc + m, 0) / trimestresRenseignes.length;
+        // Un trimestre sans note compte pour 0 : la moyenne annuelle est toujours
+        // (T1 + T2 + T3) / 3, jamais la moyenne des seuls trimestres renseignés.
+        const moyenneAnnuelle = moyennesTrimestre.reduce<number>((acc, m) => acc + (m ?? 0), 0) / 3;
 
         return {
           eleve: inscription.eleve,

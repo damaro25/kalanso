@@ -1,6 +1,6 @@
 import { apiClient } from './client';
 
-export type Decision = 'ADMIS' | 'REDOUBLE' | 'INDETERMINEE';
+export type Decision = 'ADMIS' | 'REDOUBLE';
 
 export interface EleveParcours {
   eleve: {
@@ -12,7 +12,7 @@ export interface EleveParcours {
   moyenneTrimestre1: number | null;
   moyenneTrimestre2: number | null;
   moyenneTrimestre3: number | null;
-  moyenneAnnuelle: number | null;
+  moyenneAnnuelle: number;
   decision: Decision;
 }
 

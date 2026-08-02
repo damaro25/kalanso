@@ -12,7 +12,6 @@ import { ParcoursService } from '../parcours/parcours.service';
 const LABELS_DECISION: Record<string, string> = {
   ADMIS: 'Passage classe sup.',
   REDOUBLE: 'Redouble',
-  INDETERMINEE: 'Données insuffisantes',
 };
 
 const LABELS_ETAT_MATERIEL: Record<string, string> = {
