@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Title, Stack, Select, Table, Badge, Text, Button, Group, Alert, Anchor } from '@mantine/core';
+import { IconDownload } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { fetchClasses } from '../../api/classes';
 import { fetchParcoursClasse, fetchDestinationsClasse, validerPassage, type Decision } from '../../api/parcours';
+import { telechargerExportParcours } from '../../api/reporting';
 
 const DECISION_COLORS: Record<Decision, string> = {
   ADMIS: 'green',
@@ -174,6 +176,13 @@ export function ParcoursPage() {
               onClick={() => validerMutation.mutate()}
             >
               Confirmer le passage ({nbSelections} élève(s))
+            </Button>
+            <Button
+              variant="light"
+              leftSection={<IconDownload size={16} stroke={1.5} />}
+              onClick={() => telechargerExportParcours(classeId!)}
+            >
+              Exporter (Excel)
             </Button>
           </Group>
         </Stack>

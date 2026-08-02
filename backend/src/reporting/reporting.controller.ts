@@ -200,4 +200,18 @@ export class ReportingController {
     });
     res.send(buffer);
   }
+
+  @Get('export/parcours-classe.xlsx')
+  async exportParcoursClasse(
+    @CurrentUser() user: JwtPayloadUser,
+    @Query('classeId') classeId: string,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.exportService.parcoursClasseXlsx(user.ecoleId, classeId);
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="parcours-${classeId}.xlsx"`,
+    });
+    res.send(buffer);
+  }
 }

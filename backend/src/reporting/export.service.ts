@@ -7,6 +7,13 @@ import { genererEmploiDuTempsPdf, type CreneauPdfData } from '../emploi-du-temps
 import { PaieService } from '../paie/paie.service';
 import { genererBulletinPaiePdf } from '../paie/bulletin-paie-pdf.util';
 import { LogistiqueService } from '../logistique/logistique.service';
+import { ParcoursService } from '../parcours/parcours.service';
+
+const LABELS_DECISION: Record<string, string> = {
+  ADMIS: 'Passage classe sup.',
+  REDOUBLE: 'Redouble',
+  INDETERMINEE: 'Données insuffisantes',
+};
 
 const LABELS_ETAT_MATERIEL: Record<string, string> = {
   BON: 'Bon',
@@ -51,6 +58,7 @@ export class ExportService {
     private bulletinService: BulletinService,
     private paieService: PaieService,
     private logistiqueService: LogistiqueService,
+    private parcoursService: ParcoursService,
   ) {}
 
   private async resoudreAnnee(ecoleId: string) {
@@ -567,6 +575,43 @@ export class ExportService {
       row += 1;
       sheet.getCell(`D${row}`).value = 'dont brouillon, hors masse salariale :';
       sheet.getCell(`G${row}`).value = brouillonExclu;
+    }
+
+    return workbook.xlsx.writeBuffer() as unknown as Promise<Buffer>;
+  }
+
+  // Résultats T1/T2/T3 + moyenne annuelle (moyenne des trimestres renseignés) et
+  // décision de passage, pour une classe — même calcul que Suivi de parcours.
+  async parcoursClasseXlsx(ecoleId: string, classeId: string): Promise<Buffer> {
+    const { classe, seuilPassage, parcours } = await this.parcoursService.parcoursClasse(ecoleId, classeId);
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Parcours');
+
+    sheet.mergeCells(1, 1, 1, 6);
+    sheet.getCell(1, 1).value = `Suivi de parcours — ${classe.nom} (${classe.niveau.nom} · ${classe.anneeScolaire.libelle})`;
+    sheet.getCell(1, 1).font = { bold: true, size: 14 };
+    sheet.mergeCells(2, 1, 2, 6);
+    sheet.getCell(2, 1).value = `Seuil de passage : moyenne annuelle ≥ ${seuilPassage}/10`;
+    sheet.getCell(2, 1).font = { italic: true };
+
+    const headerRow = 4;
+    sheet.getRow(headerRow).values = ['Nom', 'Prénom', 'T1', 'T2', 'T3', 'Moyenne annuelle', 'Décision'];
+    sheet.getRow(headerRow).font = { bold: true };
+    [20, 20, 10, 10, 10, 16, 22].forEach((w, i) => (sheet.getColumn(i + 1).width = w));
+
+    let row = headerRow + 1;
+    for (const ligne of parcours) {
+      sheet.getRow(row).values = [
+        ligne.eleve.nom,
+        ligne.eleve.prenom,
+        ligne.moyenneTrimestre1,
+        ligne.moyenneTrimestre2,
+        ligne.moyenneTrimestre3,
+        ligne.moyenneAnnuelle,
+        LABELS_DECISION[ligne.decision] ?? ligne.decision,
+      ];
+      row += 1;
     }
 
     return workbook.xlsx.writeBuffer() as unknown as Promise<Buffer>;

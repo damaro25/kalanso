@@ -34,3 +34,15 @@ export async function telechargerExportImpayes() {
   link.download = 'impayes.xlsx';
   link.click();
 }
+
+export async function telechargerExportParcours(classeId: string) {
+  const response = await apiClient.get('/reporting/export/parcours-classe.xlsx', {
+    params: { classeId },
+    responseType: 'blob',
+  });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'parcours.xlsx';
+  link.click();
+}

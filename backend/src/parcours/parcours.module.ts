@@ -7,5 +7,6 @@ import { ParcoursService } from './parcours.service';
   imports: [FinancesModule],
   controllers: [ParcoursController],
   providers: [ParcoursService],
+  exports: [ParcoursService],
 })
 export class ParcoursModule {}
