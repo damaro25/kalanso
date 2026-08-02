@@ -44,6 +44,14 @@ export class FacturesService {
     const classe = await this.prisma.classe.findFirst({ where: { id: classeId, ecoleId } });
     if (!classe) return;
 
+    // Réinscription si l'élève a déjà été inscrit une année scolaire antérieure
+    // (peu importe la classe/le niveau) : le tarif de retour peut différer de
+    // celui appliqué aux nouveaux admis.
+    const inscriptionAnterieure = await this.prisma.inscription.findFirst({
+      where: { ecoleId, eleveId, anneeScolaireId: { not: anneeScolaireId } },
+    });
+    const estReinscription = !!inscriptionAnterieure;
+
     // Une inscription acceptée vaut paiement des frais d'inscription : contrairement à
     // l'écolage (suivi progressivement au fil des paiements réels), ce frais est réputé
     // réglé au moment de l'admission — la facture est créée directement soldée, avec son
@@ -52,7 +60,9 @@ export class FacturesService {
     const defautNiveau = await this.prisma.fraisInscriptionNiveau.findFirst({
       where: { ecoleId, niveauId: classe.niveauId, anneeScolaireId },
     });
-    const montantInscription = defautNiveau ? Number(defautNiveau.montant) : 0;
+    const montantInscription = defautNiveau
+      ? Number((estReinscription ? defautNiveau.montantReinscription : null) ?? defautNiveau.montant)
+      : 0;
     if (montantInscription > 0) {
       const factureExistante = await this.prisma.facture.findFirst({
         where: { ecoleId, eleveId, anneeScolaireId, type: 'INSCRIPTION' },
@@ -63,7 +73,7 @@ export class FacturesService {
             ecoleId,
             eleveId,
             anneeScolaireId,
-            libelle: `Frais d'inscription - ${classe.nom}`,
+            libelle: `Frais ${estReinscription ? 'de réinscription' : "d'inscription"} - ${classe.nom}`,
             type: 'INSCRIPTION',
             montantTotal: montantInscription,
             montantPaye: montantInscription,

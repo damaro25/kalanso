@@ -34,6 +34,7 @@ export class FraisInscriptionNiveauService {
         niveauId: dto.niveauId,
         anneeScolaireId: dto.anneeScolaireId,
         montant: dto.montant,
+        montantReinscription: dto.montantReinscription,
       },
       include: { niveau: true },
     });
@@ -53,7 +54,7 @@ export class FraisInscriptionNiveauService {
 
     return this.prisma.fraisInscriptionNiveau.update({
       where: { id },
-      data: { montant: dto.montant, anneeScolaireId: dto.anneeScolaireId },
+      data: { montant: dto.montant, montantReinscription: dto.montantReinscription, anneeScolaireId: dto.anneeScolaireId },
       include: { niveau: true },
     });
   }

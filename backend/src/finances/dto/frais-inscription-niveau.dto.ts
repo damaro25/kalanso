@@ -10,6 +10,11 @@ export class CreateFraisInscriptionNiveauDto {
   @IsNumber()
   @IsPositive()
   montant: number;
+
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  montantReinscription?: number;
 }
 
 export class UpdateFraisInscriptionNiveauDto {
@@ -17,6 +22,11 @@ export class UpdateFraisInscriptionNiveauDto {
   @IsNumber()
   @IsPositive()
   montant?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  montantReinscription?: number;
 
   @IsOptional()
   @IsString()

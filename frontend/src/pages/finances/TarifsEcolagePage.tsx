@@ -83,6 +83,7 @@ export function TarifsEcolagePage() {
 
   const [niveauIdInscription, setNiveauIdInscription] = useState<string | null>(null);
   const [montantInscription, setMontantInscription] = useState<number | ''>('');
+  const [montantReinscription, setMontantReinscription] = useState<number | ''>('');
   const [anneeScolaireIdInscription, setAnneeScolaireIdInscription] = useState<string | null>(null);
   const anneeSelectionneeInscription = anneeScolaireIdInscription ?? anneeCourante?.id ?? null;
 
@@ -92,6 +93,7 @@ export function TarifsEcolagePage() {
         niveauId: niveauIdInscription!,
         anneeScolaireId: anneeSelectionneeInscription!,
         montant: Number(montantInscription),
+        montantReinscription: montantReinscription === '' ? undefined : Number(montantReinscription),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['frais-inscription-niveau'] });
@@ -99,6 +101,7 @@ export function TarifsEcolagePage() {
       notifications.show({ message: "Frais d'inscription du niveau enregistrés", color: 'green' });
       setNiveauIdInscription(null);
       setMontantInscription('');
+      setMontantReinscription('');
     },
     onError: (error: any) =>
       notifications.show({
@@ -110,11 +113,13 @@ export function TarifsEcolagePage() {
   // Édition d'un frais d'inscription niveau existant
   const [fraisEnEdition, setFraisEnEdition] = useState<FraisInscriptionNiveau | null>(null);
   const [montantFraisEdition, setMontantFraisEdition] = useState<number | ''>('');
+  const [montantReinscriptionEdition, setMontantReinscriptionEdition] = useState<number | ''>('');
   const [anneeEditionFrais, setAnneeEditionFrais] = useState<string | null>(null);
 
   function ouvrirEditionFrais(f: FraisInscriptionNiveau) {
     setFraisEnEdition(f);
     setMontantFraisEdition(Number(f.montant));
+    setMontantReinscriptionEdition(f.montantReinscription === null ? '' : Number(f.montantReinscription));
     setAnneeEditionFrais(f.anneeScolaireId);
   }
 
@@ -122,6 +127,7 @@ export function TarifsEcolagePage() {
     mutationFn: () =>
       updateFraisInscriptionNiveau(fraisEnEdition!.id, {
         montant: Number(montantFraisEdition),
+        montantReinscription: montantReinscriptionEdition === '' ? undefined : Number(montantReinscriptionEdition),
         anneeScolaireId: anneeEditionFrais ?? undefined,
       }),
     onSuccess: () => {
@@ -209,7 +215,9 @@ export function TarifsEcolagePage() {
       </Title>
       <Text size="sm" c="dimmed">
         Montant facturé à l'inscription de tout élève admis dans une classe de ce niveau, pour l'année
-        scolaire concernée. Un seul montant par niveau et par année scolaire.
+        scolaire concernée. Un seul montant par niveau et par année scolaire. Le montant de
+        réinscription (optionnel) s'applique aux élèves déjà inscrits une année antérieure ; s'il n'est
+        pas défini, le montant "Nouveaux" s'applique à tous.
       </Text>
 
       <Paper withBorder p="md">
@@ -231,9 +239,14 @@ export function TarifsEcolagePage() {
             w={180}
           />
           <NumberInput
-            placeholder="Montant (GNF)"
+            placeholder="Nouveaux (GNF)"
             value={montantInscription}
             onChange={(v) => setMontantInscription(v === '' ? '' : Number(v))}
+          />
+          <NumberInput
+            placeholder="Réinscription (optionnel)"
+            value={montantReinscription}
+            onChange={(v) => setMontantReinscription(v === '' ? '' : Number(v))}
           />
           <Button
             disabled={!niveauIdInscription || !montantInscription || !anneeSelectionneeInscription}
@@ -257,7 +270,8 @@ export function TarifsEcolagePage() {
             <Table.Tr>
               <Table.Th>Niveau</Table.Th>
               <Table.Th>Année scolaire</Table.Th>
-              <Table.Th>Montant</Table.Th>
+              <Table.Th>Nouveaux</Table.Th>
+              <Table.Th>Réinscription</Table.Th>
               <Table.Th />
             </Table.Tr>
           </Table.Thead>
@@ -267,6 +281,11 @@ export function TarifsEcolagePage() {
                 <Table.Td>{f.niveau.nom}</Table.Td>
                 <Table.Td>{f.anneeScolaire?.libelle ?? '—'}</Table.Td>
                 <Table.Td>{Number(f.montant).toLocaleString('fr-FR')} GNF</Table.Td>
+                <Table.Td>
+                  {f.montantReinscription === null
+                    ? '= Nouveaux'
+                    : `${Number(f.montantReinscription).toLocaleString('fr-FR')} GNF`}
+                </Table.Td>
                 <Table.Td>
                   <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEditionFrais(f)}>
                     Modifier
@@ -322,10 +341,17 @@ export function TarifsEcolagePage() {
             onChange={setAnneeEditionFrais}
           />
           <NumberInput
-            label="Montant (GNF)"
+            label="Montant nouveaux (GNF)"
             min={0}
             value={montantFraisEdition}
             onChange={(v) => setMontantFraisEdition(v === '' ? '' : Number(v))}
+          />
+          <NumberInput
+            label="Montant réinscription (GNF, optionnel)"
+            description="Laisser vide pour appliquer le même montant que les nouveaux"
+            min={0}
+            value={montantReinscriptionEdition}
+            onChange={(v) => setMontantReinscriptionEdition(v === '' ? '' : Number(v))}
           />
           <Button
             disabled={!montantFraisEdition || !anneeEditionFrais}

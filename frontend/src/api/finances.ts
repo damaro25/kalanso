@@ -65,6 +65,7 @@ export async function updateTarif(id: string, input: UpdateTarifInput): Promise<
 export interface FraisInscriptionNiveau {
   id: string;
   montant: string;
+  montantReinscription: string | null;
   anneeScolaireId: string;
   niveau: { id: string; nom: string };
   anneeScolaire: { id: string; libelle: string } | null;
@@ -74,6 +75,7 @@ export interface CreateFraisInscriptionNiveauInput {
   niveauId: string;
   anneeScolaireId: string;
   montant: number;
+  montantReinscription?: number;
 }
 
 export async function fetchFraisInscriptionNiveau(): Promise<FraisInscriptionNiveau[]> {
@@ -90,6 +92,7 @@ export async function createFraisInscriptionNiveau(
 
 export interface UpdateFraisInscriptionNiveauInput {
   montant?: number;
+  montantReinscription?: number;
   anneeScolaireId?: string;
 }
 
