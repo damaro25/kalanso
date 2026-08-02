@@ -35,7 +35,7 @@ import {
   type StatutDocument,
   type TypeDocument,
 } from '../../api/admissions';
-import { fetchClasses } from '../../api/classes';
+import { fetchClasses, fetchAnneesScolaires } from '../../api/classes';
 import { confirmerSuppression } from '../../lib/confirm';
 
 const INSCRIPTION_DIRECTE_VIDE: InscriptionDirecteInput = {
@@ -100,6 +100,11 @@ export function AdmissionsPage() {
     enabled: filtre === 'HISTORIQUE',
   });
   const { data: classes } = useQuery({ queryKey: ['classes'], queryFn: fetchClasses });
+  const { data: annees } = useQuery({ queryKey: ['annees-scolaires'], queryFn: fetchAnneesScolaires });
+  // Une admission ne peut affecter l'élève qu'à une classe de l'année scolaire
+  // courante : proposer des classes d'années passées n'aurait pas de sens.
+  const anneeCourante = annees?.find((a) => a.courante) ?? annees?.[0];
+  const classesAnneeCourante = (classes ?? []).filter((c) => c.anneeScolaire.id === anneeCourante?.id);
 
   const [demandeAccept, setDemandeAccept] = useState<DemandeInscription | null>(null);
   const [classeId, setClasseId] = useState<string | null>(null);
@@ -425,7 +430,8 @@ export function AdmissionsPage() {
           <Select
             label="Classe"
             placeholder="Choisir une classe"
-            data={(classes ?? []).map((c) => ({ value: c.id, label: `${c.nom} (${c.niveau.nom})` }))}
+            description={anneeCourante ? `Année scolaire ${anneeCourante.libelle}` : undefined}
+            data={classesAnneeCourante.map((c) => ({ value: c.id, label: `${c.nom} (${c.niveau.nom})` }))}
             value={classeId}
             onChange={setClasseId}
             required

@@ -1,6 +1,7 @@
 import { apiClient } from './client';
 
 export interface DashboardData {
+  anneeScolaire: { id: string; libelle: string };
   totalEleves: number;
   totalPersonnel: number;
   paiementsDuMois: { montant: number; nombre: number };

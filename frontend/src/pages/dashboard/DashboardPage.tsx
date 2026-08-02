@@ -31,7 +31,12 @@ export function DashboardPage() {
   return (
     <Stack>
       <Group justify="space-between">
-        <Title order={2}>Tableau de bord</Title>
+        <div>
+          <Title order={2}>Tableau de bord</Title>
+          <Text c="dimmed" size="sm">
+            Année scolaire {data.anneeScolaire.libelle}
+          </Text>
+        </div>
         <Group>
           <Button variant="light" leftSection={<IconDownload size={16} stroke={1.5} />} onClick={() => telechargerExportEleves()}>
             Télécharger la liste des élèves

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
 import { BulletinService, calculerMoyenne, mention } from '../notes/bulletin.service';
@@ -53,8 +53,22 @@ export class ExportService {
     private logistiqueService: LogistiqueService,
   ) {}
 
+  private async resoudreAnnee(ecoleId: string) {
+    const courante = await this.prisma.anneeScolaire.findFirst({ where: { ecoleId, courante: true } });
+    if (courante) return courante;
+    // à défaut, la plus récente
+    const derniere = await this.prisma.anneeScolaire.findFirst({ where: { ecoleId }, orderBy: { dateDebut: 'desc' } });
+    if (!derniere) throw new BadRequestException('Aucune année scolaire définie');
+    return derniere;
+  }
+
   async elevesXlsx(ecoleId: string): Promise<Buffer> {
-    const eleves = await this.prisma.eleve.findMany({ where: { ecoleId, actif: true }, orderBy: { nom: 'asc' } });
+    const anneeCourante = await this.resoudreAnnee(ecoleId);
+    const inscriptions = await this.prisma.inscription.findMany({
+      where: { ecoleId, anneeScolaireId: anneeCourante.id, statut: 'EN_COURS' },
+      include: { eleve: true, classe: true },
+      orderBy: { eleve: { nom: 'asc' } },
+    });
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Élèves');
@@ -63,17 +77,25 @@ export class ExportService {
       { header: 'Nom', key: 'nom', width: 20 },
       { header: 'Prénom', key: 'prenom', width: 20 },
       { header: 'Genre', key: 'genre', width: 10 },
+      { header: 'Classe', key: 'classe', width: 15 },
     ];
-    for (const eleve of eleves) {
-      sheet.addRow({ matricule: eleve.matricule ?? '', nom: eleve.nom, prenom: eleve.prenom, genre: eleve.genre });
+    for (const i of inscriptions) {
+      sheet.addRow({
+        matricule: i.eleve.matricule ?? '',
+        nom: i.eleve.nom,
+        prenom: i.eleve.prenom,
+        genre: i.eleve.genre,
+        classe: i.classe.nom,
+      });
     }
 
     return workbook.xlsx.writeBuffer() as unknown as Promise<Buffer>;
   }
 
   async impayesXlsx(ecoleId: string): Promise<Buffer> {
+    const anneeCourante = await this.resoudreAnnee(ecoleId);
     const factures = await this.prisma.facture.findMany({
-      where: { ecoleId, statut: { in: ['IMPAYEE', 'PARTIELLE'] } },
+      where: { ecoleId, anneeScolaireId: anneeCourante.id, statut: { in: ['IMPAYEE', 'PARTIELLE'] } },
       include: { eleve: true },
       orderBy: { dateEcheance: 'asc' },
     });
