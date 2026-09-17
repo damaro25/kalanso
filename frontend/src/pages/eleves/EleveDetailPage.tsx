@@ -1,20 +1,20 @@
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Title, Text, Paper, Group, Stack, Select, Button, Badge, SimpleGrid, TextInput, NumberInput } from '@mantine/core';
+import { Title, Text, Paper, Group, Stack, Select, Button, Badge, SimpleGrid, NumberInput, Modal, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconDownload, IconEye } from '@tabler/icons-react';
 import { useState } from 'react';
 import { fetchEleveFiche, inscrireEleve } from '../../api/eleves';
 import { fetchClasses } from '../../api/classes';
-import { createFacture, ouvrirFacturePdf, ouvrirRecu } from '../../api/finances';
+import { createPaiement, ouvrirFacturePdf, ouvrirRecu } from '../../api/finances';
 import { telechargerBulletin, ouvrirBulletinPdf } from '../../api/notes';
+import { usePendingIds } from '../../offline/outbox';
 
 export function EleveDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const idsEnAttente = usePendingIds();
   const [selectedClasse, setSelectedClasse] = useState<string | null>(null);
-  const [factureLibelle, setFactureLibelle] = useState('');
-  const [factureMontant, setFactureMontant] = useState<number | ''>('');
   const [trimestreBulletin, setTrimestreBulletin] = useState<string | null>('1');
 
   const { data: fiche, isLoading } = useQuery({
@@ -34,16 +34,22 @@ export function EleveDetailPage() {
     },
   });
 
-  const factureMutation = useMutation({
-    mutationFn: () => createFacture({ eleveId: id!, libelle: factureLibelle, montantTotal: Number(factureMontant) }),
-    onSuccess: () => {
+  // Encaissement d'un paiement sur une facture existante
+  const [factureIdPaiement, setFactureIdPaiement] = useState<string | null>(null);
+  const [montantPaiement, setMontantPaiement] = useState<number | ''>('');
+  const [modePaiement, setModePaiement] = useState<string | null>('ESPECES');
+  const [dernierPaiementId, setDernierPaiementId] = useState<string | null>(null);
+
+  const paiementMutation = useMutation({
+    mutationFn: () => createPaiement({ factureId: factureIdPaiement!, montant: Number(montantPaiement), mode: modePaiement as any }),
+    onSuccess: (paiement) => {
       queryClient.invalidateQueries({ queryKey: ['eleve-fiche', id] });
       queryClient.invalidateQueries({ queryKey: ['factures-impayes'] });
-      notifications.show({ message: 'Facture créée', color: 'green' });
-      setFactureLibelle('');
-      setFactureMontant('');
+      notifications.show({ message: 'Paiement enregistré', color: 'green' });
+      setDernierPaiementId(paiement.id);
+      setMontantPaiement('');
     },
-    onError: () => notifications.show({ message: 'Erreur lors de la création de la facture', color: 'red' }),
+    onError: () => notifications.show({ message: "Erreur lors de l'enregistrement du paiement", color: 'red' }),
   });
 
   if (isLoading || !fiche) return <p>Chargement...</p>;
@@ -107,32 +113,6 @@ export function EleveDetailPage() {
 
       <Paper withBorder p="md">
         <Title order={4} mb="sm">
-          Créer une facture
-        </Title>
-        <Group>
-          <TextInput
-            placeholder="Libellé (ex: Écolage Trimestre 1)"
-            value={factureLibelle}
-            onChange={(e) => setFactureLibelle(e.currentTarget.value)}
-            w={280}
-          />
-          <NumberInput
-            placeholder="Montant (GNF)"
-            value={factureMontant}
-            onChange={(v) => setFactureMontant(v === '' ? '' : Number(v))}
-          />
-          <Button
-            disabled={!factureLibelle || !factureMontant}
-            loading={factureMutation.isPending}
-            onClick={() => factureMutation.mutate()}
-          >
-            Créer la facture
-          </Button>
-        </Group>
-      </Paper>
-
-      <Paper withBorder p="md">
-        <Title order={4} mb="sm">
           Factures
         </Title>
         {fiche.factures.length === 0 && <Text c="dimmed">Aucune facture</Text>}
@@ -142,9 +122,16 @@ export function EleveDetailPage() {
               <Text>
                 {f.libelle} — {Number(f.montantTotal).toLocaleString('fr-FR')} GNF ({f.statut})
               </Text>
-              <Button size="xs" variant="light" leftSection={<IconEye size={14} stroke={1.5} />} onClick={() => ouvrirFacturePdf(f.id)}>
-                Voir la facture
-              </Button>
+              <Group gap="xs">
+                {(f.statut === 'IMPAYEE' || f.statut === 'PARTIELLE') && (
+                  <Button size="xs" onClick={() => setFactureIdPaiement(f.id)}>
+                    Encaisser
+                  </Button>
+                )}
+                <Button size="xs" variant="light" leftSection={<IconEye size={14} stroke={1.5} />} onClick={() => ouvrirFacturePdf(f.id)}>
+                  Voir la facture
+                </Button>
+              </Group>
             </Group>
             {f.paiements.length === 0 && (
               <Text size="sm" c="dimmed" ml="md">
@@ -207,6 +194,51 @@ export function EleveDetailPage() {
           </Badge>
         ))}
       </Paper>
+
+      <Modal
+        opened={!!factureIdPaiement}
+        onClose={() => {
+          setFactureIdPaiement(null);
+          setDernierPaiementId(null);
+        }}
+        title="Enregistrer un paiement"
+      >
+        <Stack>
+          <NumberInput
+            label="Montant (GNF)"
+            value={montantPaiement}
+            onChange={(v) => setMontantPaiement(v === '' ? '' : Number(v))}
+          />
+          <Select
+            label="Mode de paiement"
+            data={[
+              { value: 'ESPECES', label: 'Espèces' },
+              { value: 'VIREMENT', label: 'Virement' },
+              { value: 'CHEQUE', label: 'Chèque' },
+              { value: 'AUTRE', label: 'Autre' },
+            ]}
+            value={modePaiement}
+            onChange={setModePaiement}
+          />
+          <Button disabled={!montantPaiement} loading={paiementMutation.isPending} onClick={() => paiementMutation.mutate()}>
+            Enregistrer le paiement
+          </Button>
+          {dernierPaiementId && (
+            <Tooltip
+              label="Disponible une fois le paiement synchronisé"
+              disabled={!idsEnAttente.has(dernierPaiementId)}
+            >
+              <Button
+                variant="light"
+                disabled={idsEnAttente.has(dernierPaiementId)}
+                onClick={() => ouvrirRecu(dernierPaiementId)}
+              >
+                Voir le reçu du dernier paiement
+              </Button>
+            </Tooltip>
+          )}
+        </Stack>
+      </Modal>
     </Stack>
   );
 }
