@@ -83,8 +83,14 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1",
+      "^.*/prisma/prisma\\.service$": "<rootDir>/../test/mocks/prisma.service.ts",
+      "^bcrypt(js)?$": "<rootDir>/../test/mocks/bcrypt.ts"
+    },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "**/*.(t|j)s",
+      "!generated/**"
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
