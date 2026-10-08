@@ -22,8 +22,15 @@ export class EmploiDuTempsService {
 
   async findByPersonnel(ecoleId: string, personnelId: string) {
     await this.prisma.personnel.findFirstOrThrow({ where: { id: personnelId, ecoleId } });
+
+    // Emploi du temps de l'année courante uniquement (à défaut, la plus récente) :
+    // les créneaux des années passées ne sont plus d'actualité.
+    const annee =
+      (await this.prisma.anneeScolaire.findFirst({ where: { ecoleId, courante: true } })) ??
+      (await this.prisma.anneeScolaire.findFirst({ where: { ecoleId }, orderBy: { dateDebut: 'desc' } }));
+
     return this.prisma.creneau.findMany({
-      where: { ecoleId, personnelId },
+      where: { ecoleId, personnelId, anneeScolaireId: annee?.id },
       include: { matiere: true, classe: true, salle: true },
       orderBy: [{ jour: 'asc' }, { heureDebut: 'asc' }],
     });

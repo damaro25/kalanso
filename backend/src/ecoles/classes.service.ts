@@ -14,7 +14,16 @@ export class ClassesService {
     });
   }
 
-  create(ecoleId: string, dto: CreateClasseDto) {
+  async create(ecoleId: string, dto: CreateClasseDto) {
+    // Le niveau et l'année viennent du client : sans ce contrôle, une classe
+    // pourrait être rattachée au niveau ou à l'année d'une autre école.
+    const [niveau, annee] = await Promise.all([
+      this.prisma.niveau.findFirst({ where: { id: dto.niveauId, ecoleId } }),
+      this.prisma.anneeScolaire.findFirst({ where: { id: dto.anneeScolaireId, ecoleId } }),
+    ]);
+    if (!niveau) throw new BadRequestException('Niveau invalide');
+    if (!annee) throw new BadRequestException('Année scolaire invalide');
+
     return this.prisma.classe.create({
       data: {
         ecoleId,

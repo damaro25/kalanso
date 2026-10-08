@@ -159,7 +159,10 @@ export function FacturesListPage() {
 
   return (
     <Stack>
-      <Title order={2}>Factures impayées</Title>
+      <div>
+        <Title order={2}>Factures impayées</Title>
+        <Text c="dimmed" size="sm">Année scolaire courante</Text>
+      </div>
 
       <Group>
         <TextInput

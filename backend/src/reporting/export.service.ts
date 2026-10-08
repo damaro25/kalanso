@@ -134,7 +134,7 @@ export class ExportService {
   async facturesXlsx(ecoleId: string): Promise<Buffer> {
     const factures = await this.prisma.facture.findMany({
       where: { ecoleId },
-      include: { eleve: true },
+      include: { eleve: true, anneeScolaire: true },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -143,6 +143,7 @@ export class ExportService {
     sheet.columns = [
       { header: 'Matricule', key: 'matricule', width: 15 },
       { header: 'Élève', key: 'eleve', width: 25 },
+      { header: 'Année scolaire', key: 'annee', width: 16 },
       { header: 'Libellé', key: 'libelle', width: 25 },
       { header: 'Type', key: 'type', width: 14 },
       { header: 'Montant total', key: 'montantTotal', width: 15 },
@@ -157,6 +158,7 @@ export class ExportService {
       sheet.addRow({
         matricule: f.eleve.matricule ?? '',
         eleve: `${f.eleve.prenom} ${f.eleve.nom}`,
+        annee: f.anneeScolaire?.libelle ?? '',
         libelle: f.libelle,
         type: f.type,
         montantTotal: Number(f.montantTotal),

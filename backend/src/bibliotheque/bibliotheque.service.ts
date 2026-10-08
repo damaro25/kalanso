@@ -53,8 +53,13 @@ export class BibliothequeService {
     if (empruntsEnCours > 0) {
       throw new BadRequestException('Ce livre a des emprunts en cours, retour requis avant suppression');
     }
-    await this.prisma.emprunt.deleteMany({ where: { livreId: id } });
-    return this.prisma.livre.delete({ where: { id } });
+    // Une seule transaction : si la suppression du livre échoue, l'historique
+    // des emprunts ne doit pas avoir été effacé pour rien.
+    const [, livre] = await this.prisma.$transaction([
+      this.prisma.emprunt.deleteMany({ where: { livreId: id } }),
+      this.prisma.livre.delete({ where: { id } }),
+    ]);
+    return livre;
   }
 
   // ── Emprunts ──

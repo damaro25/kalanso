@@ -21,7 +21,21 @@ export class FraisInscriptionNiveauService {
     return frais.map((f) => ({ ...f, anneeScolaire: anneeParId.get(f.anneeScolaireId) ?? null }));
   }
 
+  // niveauId / anneeScolaireId sont de simples champs (pas de relation Prisma) :
+  // rien en base n'empêche d'y mettre l'id d'une autre école. On vérifie nous-mêmes.
+  private async verifierReferences(ecoleId: string, niveauId?: string, anneeScolaireId?: string) {
+    if (niveauId) {
+      const niveau = await this.prisma.niveau.findFirst({ where: { id: niveauId, ecoleId } });
+      if (!niveau) throw new BadRequestException('Niveau invalide');
+    }
+    if (anneeScolaireId) {
+      const annee = await this.prisma.anneeScolaire.findFirst({ where: { id: anneeScolaireId, ecoleId } });
+      if (!annee) throw new BadRequestException('Année scolaire invalide');
+    }
+  }
+
   async create(ecoleId: string, dto: CreateFraisInscriptionNiveauDto) {
+    await this.verifierReferences(ecoleId, dto.niveauId, dto.anneeScolaireId);
     const existant = await this.prisma.fraisInscriptionNiveau.findFirst({
       where: { ecoleId, niveauId: dto.niveauId, anneeScolaireId: dto.anneeScolaireId },
     });
@@ -44,6 +58,7 @@ export class FraisInscriptionNiveauService {
     const actuel = await this.prisma.fraisInscriptionNiveau.findFirstOrThrow({ where: { id, ecoleId } });
 
     if (dto.anneeScolaireId && dto.anneeScolaireId !== actuel.anneeScolaireId) {
+      await this.verifierReferences(ecoleId, undefined, dto.anneeScolaireId);
       const conflit = await this.prisma.fraisInscriptionNiveau.findFirst({
         where: { ecoleId, niveauId: actuel.niveauId, anneeScolaireId: dto.anneeScolaireId },
       });

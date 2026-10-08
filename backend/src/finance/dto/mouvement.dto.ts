@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsNumber, IsOptional, IsPositive, IsString } from 'class-validator';
 import { TypeMouvement } from '../../generated/prisma/enums';
 
 export class CreateMouvementDto {
@@ -12,11 +12,11 @@ export class CreateMouvementDto {
   libelle: string;
 
   @IsNumber()
-  @Min(0)
+  @IsPositive()
   montant: number;
 
   @IsOptional()
-  @IsString()
+  @IsDateString()
   date?: string;
 
   @IsOptional()

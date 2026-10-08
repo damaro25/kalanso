@@ -1,4 +1,4 @@
-import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsDateString, IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 import { Genre } from '../../generated/prisma/enums';
 
 export class CreateDemandeDto {
@@ -17,7 +17,7 @@ export class CreateDemandeDto {
   genre: Genre;
 
   @IsOptional()
-  @IsString()
+  @IsDateString()
   dateNaissance?: string;
 
   @IsOptional()
@@ -85,7 +85,7 @@ export class InscriptionDirecteDto {
   genre: Genre;
 
   @IsOptional()
-  @IsString()
+  @IsDateString()
   dateNaissance?: string;
 
   @IsOptional()

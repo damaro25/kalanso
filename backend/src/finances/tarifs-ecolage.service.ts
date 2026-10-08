@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTarifEcolageDto, UpdateTarifEcolageDto } from './dto/tarif-ecolage.dto';
 
@@ -17,7 +17,21 @@ export class TarifsEcolageService {
     return tarifs.map((t) => ({ ...t, anneeScolaire: anneeParId.get(t.anneeScolaireId) ?? null }));
   }
 
-  create(ecoleId: string, dto: CreateTarifEcolageDto) {
+  // niveauId / anneeScolaireId sont de simples champs (pas de relation Prisma) :
+  // rien en base n'empêche d'y mettre l'id d'une autre école. On vérifie nous-mêmes.
+  private async verifierReferences(ecoleId: string, niveauId?: string, anneeScolaireId?: string) {
+    if (niveauId) {
+      const niveau = await this.prisma.niveau.findFirst({ where: { id: niveauId, ecoleId } });
+      if (!niveau) throw new BadRequestException('Niveau invalide');
+    }
+    if (anneeScolaireId) {
+      const annee = await this.prisma.anneeScolaire.findFirst({ where: { id: anneeScolaireId, ecoleId } });
+      if (!annee) throw new BadRequestException('Année scolaire invalide');
+    }
+  }
+
+  async create(ecoleId: string, dto: CreateTarifEcolageDto) {
+    await this.verifierReferences(ecoleId, dto.niveauId, dto.anneeScolaireId);
     return this.prisma.tarifEcolage.create({
       data: {
         ecoleId,
@@ -31,6 +45,7 @@ export class TarifsEcolageService {
 
   async update(ecoleId: string, id: string, dto: UpdateTarifEcolageDto) {
     await this.prisma.tarifEcolage.findFirstOrThrow({ where: { id, ecoleId } });
+    await this.verifierReferences(ecoleId, undefined, dto.anneeScolaireId);
     return this.prisma.tarifEcolage.update({
       where: { id },
       data: dto,

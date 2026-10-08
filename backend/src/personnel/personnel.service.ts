@@ -66,11 +66,23 @@ export class PersonnelService {
     return personnel;
   }
 
+  // Année scolaire de référence : la courante, à défaut la plus récente (même
+  // règle que le reste de l'application). Les créneaux des années passées ne
+  // doivent ni s'afficher ni entrer dans le calcul du salaire.
+  private async anneeReferenceId(ecoleId: string): Promise<string | undefined> {
+    const courante = await this.prisma.anneeScolaire.findFirst({ where: { ecoleId, courante: true } });
+    if (courante) return courante.id;
+    const derniere = await this.prisma.anneeScolaire.findFirst({ where: { ecoleId }, orderBy: { dateDebut: 'desc' } });
+    return derniere?.id;
+  }
+
   async findOne(ecoleId: string, id: string) {
+    const anneeScolaireId = await this.anneeReferenceId(ecoleId);
     return this.prisma.personnel.findFirstOrThrow({
       where: { id, ecoleId },
       include: {
         creneaux: {
+          where: { anneeScolaireId },
           include: { classe: { include: { niveau: true } }, matiere: true, salle: true },
           orderBy: [{ jour: 'asc' }, { heureDebut: 'asc' }],
         },
@@ -81,9 +93,10 @@ export class PersonnelService {
   // Regroupe les créneaux réels d'un enseignant par (classe, matière) : c'est
   // l'emploi du temps qui fait foi pour savoir qui enseigne quoi et combien
   // d'heures — il n'y a plus de déclaration séparée à maintenir à la main.
-  private async groupesEnseignement(personnelId: string): Promise<GroupeEnseignement[]> {
+  private async groupesEnseignement(ecoleId: string, personnelId: string): Promise<GroupeEnseignement[]> {
+    const anneeScolaireId = await this.anneeReferenceId(ecoleId);
     const creneaux = await this.prisma.creneau.findMany({
-      where: { personnelId },
+      where: { personnelId, anneeScolaireId },
       include: { classe: { include: { niveau: true } }, matiere: true },
       orderBy: { classe: { nom: 'asc' } },
     });
@@ -122,7 +135,7 @@ export class PersonnelService {
       throw new NotFoundException('Personnel introuvable');
     }
 
-    const groupes = await this.groupesEnseignement(personnelId);
+    const groupes = await this.groupesEnseignement(ecoleId, personnelId);
 
     const lignes = groupes.map((g) => {
       const heuresParMois = g.heuresParSemaine * SEMAINES_PAR_MOIS;
@@ -174,7 +187,7 @@ export class PersonnelService {
     heuresParClasse?: { classeId: string; matiereId: string; heures: number }[],
   ) {
     await this.prisma.personnel.findFirstOrThrow({ where: { id: personnelId, ecoleId } });
-    const groupes = await this.groupesEnseignement(personnelId);
+    const groupes = await this.groupesEnseignement(ecoleId, personnelId);
 
     const override = new Map((heuresParClasse ?? []).map((h) => [`${h.classeId}:${h.matiereId}`, h.heures]));
 

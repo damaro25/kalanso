@@ -163,9 +163,16 @@ export class FacturesService {
     });
   }
 
-  findImpayes(ecoleId: string) {
+  // Impayés de l'année scolaire courante (à défaut, la plus récente) : même périmètre
+  // que le tableau de bord et l'export « impayés », pour que les trois affichent le
+  // même nombre de factures.
+  async findImpayes(ecoleId: string) {
+    const annee =
+      (await this.prisma.anneeScolaire.findFirst({ where: { ecoleId, courante: true } })) ??
+      (await this.prisma.anneeScolaire.findFirst({ where: { ecoleId }, orderBy: { dateDebut: 'desc' } }));
+
     return this.prisma.facture.findMany({
-      where: { ecoleId, statut: { in: ['IMPAYEE', 'PARTIELLE'] } },
+      where: { ecoleId, anneeScolaireId: annee?.id, statut: { in: ['IMPAYEE', 'PARTIELLE'] } },
       include: { eleve: true },
       orderBy: { dateEcheance: 'asc' },
     });

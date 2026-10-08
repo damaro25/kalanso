@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateMatiereDto, UpdateMatiereDto } from './dto/matiere.dto';
 
@@ -17,9 +17,17 @@ export class MatieresService {
   async create(ecoleId: string, dto: CreateMatiereDto) {
     // Rejeu d'une requête hors-ligne déjà passée (réponse perdue en route) :
     // on ne recrée pas la matière, on renvoie celle qui existe déjà.
+    // Cloisonné par école : l'id d'une matière d'une autre école ne doit jamais être renvoyé.
     if (dto.id) {
-      const existante = await this.prisma.matiere.findUnique({ where: { id: dto.id }, include: { niveau: true } });
+      const existante = await this.prisma.matiere.findFirst({
+        where: { id: dto.id, ecoleId },
+        include: { niveau: true },
+      });
       if (existante) return existante;
+    }
+    const niveau = await this.prisma.niveau.findFirst({ where: { id: dto.niveauId, ecoleId } });
+    if (!niveau) {
+      throw new BadRequestException('Niveau invalide');
     }
     return this.prisma.matiere.create({
       data: { id: dto.id, ecoleId, niveauId: dto.niveauId, nom: dto.nom, coefficient: dto.coefficient },

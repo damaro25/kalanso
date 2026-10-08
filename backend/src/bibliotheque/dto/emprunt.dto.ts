@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsOptional, IsString } from 'class-validator';
 
 export class CreateEmpruntDto {
   @IsString()
@@ -8,6 +8,6 @@ export class CreateEmpruntDto {
   eleveId: string;
 
   @IsOptional()
-  @IsString()
+  @IsDateString()
   dateRetourPrevue?: string;
 }
