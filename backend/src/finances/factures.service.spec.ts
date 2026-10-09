@@ -63,7 +63,7 @@ describe('FacturesService', () => {
       expect(prisma.facture.create).not.toHaveBeenCalled();
     });
 
-    it("nouvel élève : facture « Frais d'inscription » au tarif nouveaux, créée soldée avec son paiement", async () => {
+    it("nouvel élève : facture « Frais d'inscription » au tarif nouveaux, créée IMPAYÉE et sans paiement (plus réglée à l'admission)", async () => {
       await service.genererFacturesEnrolement('ecole', 'e1', 'c1', 'a1');
 
       const [f] = facturesCreees();
@@ -71,10 +71,11 @@ describe('FacturesService', () => {
         libelle: "Frais d'inscription - 5eme A",
         type: 'INSCRIPTION',
         montantTotal: 75000,
-        montantPaye: 75000,
-        statut: 'PAYEE',
       });
-      expect(f.paiements.create).toMatchObject({ montant: 75000, mode: 'ESPECES' });
+      // ni montant payé, ni statut soldé, ni paiement automatique : le statut par défaut du schéma est IMPAYEE
+      expect(f.montantPaye).toBeUndefined();
+      expect(f.statut).toBeUndefined();
+      expect(f.paiements).toBeUndefined();
     });
 
     it("l'élève déjà inscrit une année antérieure est en réinscription : tarif et libellé dédiés", async () => {
@@ -122,15 +123,17 @@ describe('FacturesService', () => {
       expect(prisma.facture.update).not.toHaveBeenCalled();
     });
 
-    it("régularise une ancienne facture d'inscription restée impayée (solde + paiement correspondant)", async () => {
-      prisma.facture.findFirst.mockResolvedValue({ id: 'ancienne', montantTotal: 75000, montantPaye: 25000 });
+    it("ne solde jamais automatiquement une facture d'inscription restée impayée ou partielle", async () => {
+      for (const montantPaye of [0, 25000]) {
+        prisma.facture.findFirst.mockResolvedValue({ id: 'ancienne', montantTotal: 75000, montantPaye });
 
-      await service.genererFacturesEnrolement('ecole', 'e1', 'c1', 'a1');
+        await service.genererFacturesEnrolement('ecole', 'e1', 'c1', 'a1');
+      }
 
-      const maj = prisma.facture.update.mock.calls[0][0];
-      expect(maj.where).toEqual({ id: 'ancienne' });
-      expect(maj.data).toMatchObject({ montantPaye: 75000, statut: 'PAYEE' });
-      expect(maj.data.paiements.create.montant).toBe(50000); // le reste seulement
+      // aucune mise à jour (donc aucun paiement « régularisation »), aucune nouvelle facture
+      expect(prisma.facture.update).not.toHaveBeenCalled();
+      expect(prisma.facture.create).not.toHaveBeenCalled();
+      expect(prisma.paiement.create).not.toHaveBeenCalled();
     });
 
     it("crée une facture d'écolage par tarif du niveau, impayée", async () => {

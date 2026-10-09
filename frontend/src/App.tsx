@@ -26,6 +26,7 @@ import { InscriptionPubliquePage } from './pages/admissions/InscriptionPubliqueP
 import { PaiePage } from './pages/paie/PaiePage';
 import { LogistiquePage } from './pages/logistique/LogistiquePage';
 import { FinancePage } from './pages/finance/FinancePage';
+import { InscriptionsPage } from './pages/finances/InscriptionsPage';
 import { BibliothequePage } from './pages/bibliotheque/BibliothequePage';
 import { UtilisateursPage } from './pages/utilisateurs/UtilisateursPage';
 
@@ -52,6 +53,7 @@ function App() {
             <Route path="/niveaux" element={<NiveauxPage />} />
             <Route path="/finances/tarifs" element={<TarifsEcolagePage />} />
             <Route path="/finances/factures" element={<FacturesListPage />} />
+            <Route path="/finances/inscriptions" element={<InscriptionsPage />} />
             <Route path="/absences/appel" element={<AppelDuJourPage />} />
             <Route path="/absences/historique" element={<AbsencesHistoriquePage />} />
             <Route path="/personnel" element={<PersonnelListPage />} />

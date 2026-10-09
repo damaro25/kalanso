@@ -22,6 +22,7 @@ import {
   IconBoxSeam,
   IconBooks,
   IconStairs,
+  IconUserCheck,
   IconUserCog,
   IconLogout,
 } from '@tabler/icons-react';
@@ -88,6 +89,7 @@ const GROUPS: MenuGroup[] = [
     items: [
       { label: 'Bilan financier', to: '/finance', icon: IconReportMoney, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
       { label: 'Factures', to: '/finances/factures', icon: IconReceipt, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
+      { label: 'Paiement inscription/réinscription', to: '/finances/inscriptions', icon: IconUserCheck, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
       { label: 'Tarifs', to: '/finances/tarifs', icon: IconTags, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
       { label: 'Paie', to: '/paie', icon: IconCash, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
     ],

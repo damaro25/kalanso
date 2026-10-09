@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import * as ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFactureDto } from './dto/facture.dto';
+import { libelleFraisInscription, montantFraisInscription } from './inscription.util';
 
 export interface ImportResultat {
   creees: number;
@@ -52,17 +53,14 @@ export class FacturesService {
     });
     const estReinscription = !!inscriptionAnterieure;
 
-    // Une inscription acceptée vaut paiement des frais d'inscription : contrairement à
-    // l'écolage (suivi progressivement au fil des paiements réels), ce frais est réputé
-    // réglé au moment de l'admission — la facture est créée directement soldée, avec son
-    // paiement en espèces associé pour que l'encaissement remonte correctement dans la
-    // trésorerie et le compte de résultat.
+    // L'admission ne vaut plus paiement : la facture des frais d'inscription (ou de
+    // réinscription) est créée au montant du niveau mais reste IMPAYÉE. L'encaissement se fait
+    // ensuite avec l'option « Payer l'inscription » de la fiche élève (PaiementsService.payerInscription),
+    // qui génère le reçu. On ne touche jamais à une facture d'inscription déjà existante.
     const defautNiveau = await this.prisma.fraisInscriptionNiveau.findFirst({
       where: { ecoleId, niveauId: classe.niveauId, anneeScolaireId },
     });
-    const montantInscription = defautNiveau
-      ? Number((estReinscription ? defautNiveau.montantReinscription : null) ?? defautNiveau.montant)
-      : 0;
+    const montantInscription = montantFraisInscription(defautNiveau, estReinscription);
     if (montantInscription > 0) {
       const factureExistante = await this.prisma.facture.findFirst({
         where: { ecoleId, eleveId, anneeScolaireId, type: 'INSCRIPTION' },
@@ -73,38 +71,9 @@ export class FacturesService {
             ecoleId,
             eleveId,
             anneeScolaireId,
-            libelle: `Frais ${estReinscription ? 'de réinscription' : "d'inscription"} - ${classe.nom}`,
+            libelle: libelleFraisInscription(estReinscription, classe.nom),
             type: 'INSCRIPTION',
             montantTotal: montantInscription,
-            montantPaye: montantInscription,
-            statut: 'PAYEE',
-            paiements: {
-              create: {
-                ecoleId,
-                montant: montantInscription,
-                mode: 'ESPECES',
-                reference: "Réglé à l'inscription",
-              },
-            },
-          },
-        });
-      } else if (Number(factureExistante.montantPaye) < Number(factureExistante.montantTotal)) {
-        // Facture d'inscription générée avant cette règle et encore (partiellement) impayée :
-        // on la solde, avec le paiement correspondant pour garder la trésorerie cohérente.
-        const reste = Number(factureExistante.montantTotal) - Number(factureExistante.montantPaye);
-        await this.prisma.facture.update({
-          where: { id: factureExistante.id },
-          data: {
-            montantPaye: factureExistante.montantTotal,
-            statut: 'PAYEE',
-            paiements: {
-              create: {
-                ecoleId,
-                montant: reste,
-                mode: 'ESPECES',
-                reference: "Réglé à l'inscription (régularisation)",
-              },
-            },
           },
         });
       }
