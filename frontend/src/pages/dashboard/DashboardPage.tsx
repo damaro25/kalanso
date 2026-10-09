@@ -56,25 +56,31 @@ export function DashboardPage() {
           <Button variant="light" leftSection={<IconDownload size={16} stroke={1.5} />} onClick={() => telechargerExportEleves()}>
             Télécharger la liste des élèves
           </Button>
-          <Button variant="light" leftSection={<IconDownload size={16} stroke={1.5} />} onClick={() => telechargerExportImpayes()}>
-            Télécharger la liste des impayés
-          </Button>
+          {voitTresorerie && (
+            <Button variant="light" leftSection={<IconDownload size={16} stroke={1.5} />} onClick={() => telechargerExportImpayes()}>
+              Télécharger la liste des impayés
+            </Button>
+          )}
         </Group>
       </Group>
 
-      <SimpleGrid cols={{ base: 2, md: 5 }}>
+      <SimpleGrid cols={{ base: 2, md: voitTresorerie ? 5 : 3 }}>
         <StatCard label="Élèves" value={String(data.totalEleves)} />
         <StatCard label="Personnel" value={String(data.totalPersonnel)} />
-        <StatCard
-          label="Frais d'inscription"
-          value={`${data.fraisInscription.encaisse.toLocaleString('fr-FR')} GNF`}
-          color="green"
-        />
-        <StatCard
-          label="Impayés"
-          value={`${data.impayes.montant.toLocaleString('fr-FR')} GNF`}
-          color={data.impayes.montant > 0 ? 'red' : 'green'}
-        />
+        {voitTresorerie && data.fraisInscription && (
+          <StatCard
+            label="Frais d'inscription"
+            value={`${data.fraisInscription.encaisse.toLocaleString('fr-FR')} GNF`}
+            color="green"
+          />
+        )}
+        {voitTresorerie && data.impayes && (
+          <StatCard
+            label="Impayés"
+            value={`${data.impayes.montant.toLocaleString('fr-FR')} GNF`}
+            color={data.impayes.montant > 0 ? 'red' : 'green'}
+          />
+        )}
         <StatCard label="Absences aujourd'hui" value={String(data.absencesAujourdhui.absents)} color="orange" />
       </SimpleGrid>
 

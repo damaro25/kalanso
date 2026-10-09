@@ -4,8 +4,9 @@ export interface DashboardData {
   anneeScolaire: { id: string; libelle: string };
   totalEleves: number;
   totalPersonnel: number;
-  fraisInscription: { encaisse: number };
-  impayes: { nombre: number; montant: number };
+  // Absents de la réponse pour les rôles sans accès aux finances (secrétaire, enseignant).
+  fraisInscription?: { encaisse: number };
+  impayes?: { nombre: number; montant: number };
   absencesAujourdhui: { absents: number; retards: number; presents: number };
 }
 
