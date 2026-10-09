@@ -49,8 +49,17 @@ export interface CreateAnneeScolaireInput {
   dateFin: string;
 }
 
+// Toutes les classes, toutes années confondues : page de gestion des classes et suivi de parcours.
 export async function fetchClasses(): Promise<Classe[]> {
   const { data } = await apiClient.get('/classes');
+  return data;
+}
+
+// Classes de l'année scolaire en cours uniquement : à utiliser pour tous les filtres et sélecteurs de
+// classe (appel, notes, emploi du temps, listes...). Clé ['classes', 'courante'], donc rafraîchie
+// avec les autres requêtes ['classes'] quand une classe change.
+export async function fetchClassesCourantes(): Promise<Classe[]> {
+  const { data } = await apiClient.get('/classes', { params: { courante: true } });
   return data;
 }
 

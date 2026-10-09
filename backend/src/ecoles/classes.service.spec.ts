@@ -12,12 +12,54 @@ describe('ClassesService', () => {
   });
 
   describe('findAll', () => {
-    it("liste les classes actives de l'école, les plus récentes d'abord", async () => {
+    it("liste les classes actives de l'école, toutes années confondues, les plus récentes d'abord", async () => {
       prisma.classe.findMany.mockResolvedValue([]);
       await service.findAll('ecole');
       const arg = prisma.classe.findMany.mock.calls[0][0];
       expect(arg.where).toEqual({ ecoleId: 'ecole', actif: true });
       expect(arg.orderBy[0]).toEqual({ anneeScolaire: { dateDebut: 'desc' } });
+      expect(prisma.anneeScolaire.findFirst).not.toHaveBeenCalled();
+    });
+
+    describe('avec courante : uniquement les classes de l\'année en cours (filtres et sélecteurs)', () => {
+      beforeEach(() => {
+        prisma.classe.findMany.mockResolvedValue([]);
+      });
+
+      it("se limite à l'année scolaire courante", async () => {
+        prisma.anneeScolaire.findFirst.mockResolvedValueOnce({ id: 'a-courante' });
+
+        await service.findAll('ecole', { courante: true });
+
+        expect(prisma.anneeScolaire.findFirst.mock.calls[0][0].where).toEqual({ ecoleId: 'ecole', courante: true });
+        expect(prisma.classe.findMany.mock.calls[0][0].where).toEqual({
+          ecoleId: 'ecole',
+          actif: true,
+          anneeScolaireId: 'a-courante',
+        });
+      });
+
+      it("à défaut d'année courante, retombe sur la plus récente", async () => {
+        prisma.anneeScolaire.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'a-recente' });
+
+        await service.findAll('ecole', { courante: true });
+
+        expect(prisma.anneeScolaire.findFirst.mock.calls[1][0].orderBy).toEqual({ dateDebut: 'desc' });
+        expect(prisma.classe.findMany.mock.calls[0][0].where.anneeScolaireId).toBe('a-recente');
+      });
+
+      it("renvoie une liste vide sans chercher de classes quand l'école n'a aucune année", async () => {
+        prisma.anneeScolaire.findFirst.mockResolvedValue(null);
+        expect(await service.findAll('ecole', { courante: true })).toEqual([]);
+        expect(prisma.classe.findMany).not.toHaveBeenCalled();
+      });
+
+      it('cloisonne la recherche de l\'année par école', async () => {
+        prisma.anneeScolaire.findFirst.mockResolvedValueOnce({ id: 'a1' });
+        await service.findAll('autre-ecole', { courante: true });
+        expect(prisma.anneeScolaire.findFirst.mock.calls[0][0].where.ecoleId).toBe('autre-ecole');
+        expect(prisma.classe.findMany.mock.calls[0][0].where.ecoleId).toBe('autre-ecole');
+      });
     });
   });
 

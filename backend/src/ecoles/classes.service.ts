@@ -6,9 +6,22 @@ import { CreateClasseDto, UpdateClasseDto } from './dto/classe.dto';
 export class ClassesService {
   constructor(private prisma: PrismaService) {}
 
-  findAll(ecoleId: string) {
+  // Toutes les classes de l'école, toutes années confondues (page de gestion des classes,
+  // suivi de parcours). Avec `courante`, seulement celles de l'année scolaire en cours (à défaut
+  // d'année courante, la plus récente) : c'est la liste à proposer dans tous les filtres et
+  // sélecteurs de classe, une classe d'une année passée n'ayant pas de sens au quotidien.
+  async findAll(ecoleId: string, options: { courante?: boolean } = {}) {
+    let anneeScolaireId: string | undefined;
+    if (options.courante) {
+      const annee =
+        (await this.prisma.anneeScolaire.findFirst({ where: { ecoleId, courante: true } })) ??
+        (await this.prisma.anneeScolaire.findFirst({ where: { ecoleId }, orderBy: { dateDebut: 'desc' } }));
+      if (!annee) return [];
+      anneeScolaireId = annee.id;
+    }
+
     return this.prisma.classe.findMany({
-      where: { ecoleId, actif: true },
+      where: { ecoleId, actif: true, ...(anneeScolaireId ? { anneeScolaireId } : {}) },
       include: { niveau: true, anneeScolaire: true, _count: { select: { inscriptions: true } } },
       orderBy: [{ anneeScolaire: { dateDebut: 'desc' } }, { nom: 'asc' }],
     });

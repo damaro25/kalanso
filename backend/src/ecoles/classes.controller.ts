@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -13,9 +13,10 @@ import { CreateClasseDto, UpdateClasseDto } from './dto/classe.dto';
 export class ClassesController {
   constructor(private service: ClassesService) {}
 
+  // ?courante=true : uniquement les classes de l'année scolaire en cours (filtres et sélecteurs)
   @Get()
-  findAll(@CurrentUser() user: JwtPayloadUser) {
-    return this.service.findAll(user.ecoleId);
+  findAll(@CurrentUser() user: JwtPayloadUser, @Query('courante') courante?: string) {
+    return this.service.findAll(user.ecoleId, { courante: courante === 'true' });
   }
 
   @Get('effectifs')
