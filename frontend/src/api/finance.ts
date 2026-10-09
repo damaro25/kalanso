@@ -263,8 +263,10 @@ export async function creerMouvement(input: CreateMouvementInput): Promise<Mouve
   return data;
 }
 
-export async function supprimerMouvement(id: string): Promise<void> {
-  await apiClient.delete(`/finance/mouvements/${id}`);
+// Le code de suppression (exigé pour une dépense) passe dans un en-tête, pas dans l'adresse : il resterait sinon
+// dans les journaux d'accès du serveur.
+export async function supprimerMouvement(id: string, code?: string): Promise<void> {
+  await apiClient.delete(`/finance/mouvements/${id}`, { headers: code ? { 'X-Code-Suppression': code } : undefined });
 }
 
 export interface RegenererFacturesResult {

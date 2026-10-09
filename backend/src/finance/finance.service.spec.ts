@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { FinanceService } from './finance.service';
 import { createPrismaMock } from '../../test/helpers/prisma-mock';
 
@@ -788,10 +788,52 @@ describe('FinanceService', () => {
       expect(prisma.mouvementFinancier.delete).not.toHaveBeenCalled();
     });
 
-    it('supprimerMouvement : supprime le mouvement trouvé', async () => {
-      prisma.mouvementFinancier.findFirst.mockResolvedValue({ id: 'm1' });
+    it('supprimerMouvement : une recette se supprime sans code', async () => {
+      prisma.mouvementFinancier.findFirst.mockResolvedValue({ id: 'm1', type: 'RECETTE' });
       await service.supprimerMouvement('ecole', 'm1');
       expect(prisma.mouvementFinancier.delete).toHaveBeenCalledWith({ where: { id: 'm1' } });
+    });
+
+    describe("supprimerMouvement : code de suppression d'une dépense", () => {
+      const ancienCode = process.env.CODE_SUPPRESSION_DEPENSE;
+      beforeEach(() => {
+        delete process.env.CODE_SUPPRESSION_DEPENSE;
+        prisma.mouvementFinancier.findFirst.mockResolvedValue({ id: 'm1', type: 'DEPENSE' });
+      });
+      afterEach(() => {
+        if (ancienCode === undefined) delete process.env.CODE_SUPPRESSION_DEPENSE;
+        else process.env.CODE_SUPPRESSION_DEPENSE = ancienCode;
+      });
+
+      it('refuse sans code', async () => {
+        await expect(service.supprimerMouvement('ecole', 'm1')).rejects.toThrow(ForbiddenException);
+        await expect(service.supprimerMouvement('ecole', 'm1', '')).rejects.toThrow('code de suppression est requis');
+        expect(prisma.mouvementFinancier.delete).not.toHaveBeenCalled();
+      });
+
+      it('refuse un mauvais code', async () => {
+        for (const code of ['0000', '2025', '20260', '202']) {
+          await expect(service.supprimerMouvement('ecole', 'm1', code)).rejects.toThrow('Code de suppression incorrect');
+        }
+        expect(prisma.mouvementFinancier.delete).not.toHaveBeenCalled();
+      });
+
+      it('supprime avec le bon code (2026 par défaut)', async () => {
+        await service.supprimerMouvement('ecole', 'm1', '2026');
+        expect(prisma.mouvementFinancier.delete).toHaveBeenCalledWith({ where: { id: 'm1' } });
+      });
+
+      it('le code peut être changé par CODE_SUPPRESSION_DEPENSE', async () => {
+        process.env.CODE_SUPPRESSION_DEPENSE = '4321';
+        await expect(service.supprimerMouvement('ecole', 'm1', '2026')).rejects.toThrow(ForbiddenException);
+        await service.supprimerMouvement('ecole', 'm1', '4321');
+        expect(prisma.mouvementFinancier.delete).toHaveBeenCalledTimes(1);
+      });
+
+      it('vérifie le mouvement avant le code : un mouvement inconnu reste une erreur « introuvable »', async () => {
+        prisma.mouvementFinancier.findFirst.mockResolvedValue(null);
+        await expect(service.supprimerMouvement('ecole', 'm1', '0000')).rejects.toThrow(BadRequestException);
+      });
     });
   });
 

@@ -46,10 +46,12 @@ import {
   supprimerMouvement,
   telechargerBilanFinancier,
   regenererFactures,
+  type Mouvement,
   type TypeMouvement,
 } from '../../api/finance';
 import { TresorerieTable } from './TresorerieTable';
 import { DepenseModal } from './DepenseModal';
+import { SuppressionDepenseModal } from './SuppressionDepenseModal';
 import { POSTES_DEPENSE } from './postes';
 
 const CATEGORIES_DEPENSE = POSTES_DEPENSE;
@@ -117,6 +119,8 @@ export function FinancePage() {
   // Modal ajout de mouvement
   const [modalOuvert, setModalOuvert] = useState(false);
   const [depenseOuverte, setDepenseOuverte] = useState(false);
+  // Dépense en cours de suppression : demande le code à 4 chiffres avant de l'effacer
+  const [depenseASupprimer, setDepenseASupprimer] = useState<Mouvement | null>(null);
   const [type, setType] = useState<TypeMouvement>('DEPENSE');
   const [categorie, setCategorie] = useState<string | null>('Loyer');
   const [libelle, setLibelle] = useState('');
@@ -343,10 +347,12 @@ export function FinancePage() {
                         type="button"
                         c="red"
                         onClick={() =>
-                          confirmerSuppression({
-                            message: `Voulez-vous vraiment supprimer le mouvement « ${m.libelle} » (${fmt(Number(m.montant))} GNF) ? Cette action est définitive.`,
-                            onConfirm: () => supprimerMutation.mutate(m.id),
-                          })
+                          m.type === 'DEPENSE'
+                            ? setDepenseASupprimer(m)
+                            : confirmerSuppression({
+                                message: `Voulez-vous vraiment supprimer le mouvement « ${m.libelle} » (${fmt(Number(m.montant))} GNF) ? Cette action est définitive.`,
+                                onConfirm: () => supprimerMutation.mutate(m.id),
+                              })
                         }
                       >
                         Supprimer
@@ -477,6 +483,7 @@ export function FinancePage() {
       </Paper>
 
       <DepenseModal opened={depenseOuverte} onClose={() => setDepenseOuverte(false)} tresorerie={tresorerie} />
+      <SuppressionDepenseModal depense={depenseASupprimer} onClose={() => setDepenseASupprimer(null)} onSupprimee={invalider} />
 
       <Modal opened={modalOuvert} onClose={() => setModalOuvert(false)} title="Enregistrer un mouvement financier">
         <Stack>

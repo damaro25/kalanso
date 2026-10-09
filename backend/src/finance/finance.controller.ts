@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -105,9 +105,15 @@ export class FinanceController {
     return this.service.creerMouvement(user.ecoleId, dto, user.userId);
   }
 
+  // Le code de suppression d'une dépense voyage dans un en-tête : il resterait sinon dans les journaux d'accès
+  // du serveur web s'il était passé dans l'adresse.
   @Delete('mouvements/:id')
-  supprimerMouvement(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string) {
-    return this.service.supprimerMouvement(user.ecoleId, id);
+  supprimerMouvement(
+    @CurrentUser() user: JwtPayloadUser,
+    @Param('id') id: string,
+    @Headers('x-code-suppression') code?: string,
+  ) {
+    return this.service.supprimerMouvement(user.ecoleId, id, code);
   }
 
   @Post('regenerer-factures')

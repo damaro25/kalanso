@@ -1,5 +1,6 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { codeSuppressionValide } from './code-suppression';
 import { estFraisEtudes, typeOperation, type TypeOperation } from '../finances/type-operation.util';
 
 export interface LigneBordereau {
@@ -234,9 +235,15 @@ export class FinanceService {
     return this.prisma.mouvementFinancier.findMany({ where, orderBy: { date: 'desc' } });
   }
 
-  async supprimerMouvement(ecoleId: string, id: string) {
+  async supprimerMouvement(ecoleId: string, id: string, code?: string) {
     const m = await this.prisma.mouvementFinancier.findFirst({ where: { id, ecoleId } });
     if (!m) throw new BadRequestException('Mouvement introuvable');
+    // 403 et non 401 : le client déconnecte l'utilisateur sur un 401, ce qui n'a pas de sens pour un mauvais code.
+    if (m.type === 'DEPENSE' && !codeSuppressionValide(code)) {
+      throw new ForbiddenException(
+        code ? 'Code de suppression incorrect' : 'Le code de suppression est requis pour supprimer une dépense',
+      );
+    }
     return this.prisma.mouvementFinancier.delete({ where: { id } });
   }
 

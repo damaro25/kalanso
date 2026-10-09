@@ -90,7 +90,10 @@ DATABASE_URL="postgresql://kalanso:MOT_DE_PASSE_FORT@localhost:5432/kalanso"
 JWT_SECRET="<chaîne aléatoire longue>"
 JWT_EXPIRES_IN="8h"
 PORT=3000
+CODE_SUPPRESSION_DEPENSE="2026"
 ```
+
+`CODE_SUPPRESSION_DEPENSE` est le code à 4 chiffres demandé pour supprimer une dépense. S'il est absent, le code est `2026`. Choisissez-en un autre en production et communiquez-le uniquement aux personnes habilitées ; après un changement, redémarrez le service (`sudo systemctl restart kalanso`).
 
 Générer le secret JWT : `openssl rand -hex 48`. Ne le changez plus ensuite, sinon toutes les sessions ouvertes sont invalidées.
 
