@@ -9,6 +9,9 @@ export interface Utilisateur {
   role: Role;
   actif: boolean;
   createdAt: string;
+  // Fiche du personnel reliée au compte : indispensable pour un enseignant, qui n'accède qu'à ses classes.
+  personnelId?: string | null;
+  personnel?: { nom: string; prenom: string } | null;
 }
 
 export interface CreateUtilisateurInput {
@@ -17,6 +20,7 @@ export interface CreateUtilisateurInput {
   email: string;
   password: string;
   role: Role;
+  personnelId?: string;
 }
 
 export interface UpdateUtilisateurInput {
@@ -26,6 +30,7 @@ export interface UpdateUtilisateurInput {
   role?: Role;
   actif?: boolean;
   password?: string;
+  personnelId?: string | null;
 }
 
 export async function fetchUtilisateurs(): Promise<Utilisateur[]> {

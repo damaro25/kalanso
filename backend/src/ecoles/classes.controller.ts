@@ -5,28 +5,37 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayloadUser } from '../common/decorators/current-user.decorator';
 import { RoleUtilisateur } from '../generated/prisma/enums';
+import { PerimetreService } from '../common/perimetre/perimetre.service';
 import { ClassesService } from './classes.service';
 import { CreateClasseDto, UpdateClasseDto } from './dto/classe.dto';
 
 @Controller('classes')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ClassesController {
-  constructor(private service: ClassesService) {}
+  constructor(
+    private service: ClassesService,
+    private perimetre: PerimetreService,
+  ) {}
 
   // ?courante=true : uniquement les classes de l'année scolaire en cours (filtres et sélecteurs)
   @Get()
-  findAll(@CurrentUser() user: JwtPayloadUser, @Query('courante') courante?: string) {
-    return this.service.findAll(user.ecoleId, { courante: courante === 'true' });
+  async findAll(@CurrentUser() user: JwtPayloadUser, @Query('courante') courante?: string) {
+    return this.service.findAll(user.ecoleId, {
+      courante: courante === 'true',
+      classeIds: await this.perimetre.classesAutorisees(user),
+    });
   }
 
   @Get('effectifs')
-  effectifs(@CurrentUser() user: JwtPayloadUser) {
-    return this.service.effectifs(user.ecoleId);
+  async effectifs(@CurrentUser() user: JwtPayloadUser) {
+    return this.service.effectifs(user.ecoleId, await this.perimetre.classesAutorisees(user));
   }
 
   @Get(':id/eleves')
-  eleves(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string) {
-    return this.service.eleves(user.ecoleId, id);
+  async eleves(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string) {
+    await this.perimetre.exigerClasse(user, id);
+    const eleves = await this.service.eleves(user.ecoleId, id);
+    return this.perimetre.estRestreint(user) ? eleves.map(({ adresse: _adresse, ...sansAdresse }) => sansAdresse) : eleves;
   }
 
   @Post()

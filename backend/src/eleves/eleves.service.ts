@@ -12,8 +12,18 @@ export class ElevesService {
     private facturesService: FacturesService,
   ) {}
 
-  findAll(ecoleId: string) {
-    return this.prisma.eleve.findMany({ where: { ecoleId, actif: true }, orderBy: { nom: 'asc' } });
+  // `classeIds` non nul : périmètre d'un enseignant. On ne renvoie alors que les élèves inscrits dans ces classes,
+  // sans leur adresse personnelle, inutile pour enseigner.
+  async findAll(ecoleId: string, classeIds: string[] | null = null) {
+    const eleves = await this.prisma.eleve.findMany({
+      where: {
+        ecoleId,
+        actif: true,
+        ...(classeIds ? { inscriptions: { some: { statut: 'EN_COURS', classeId: { in: classeIds } } } } : {}),
+      },
+      orderBy: { nom: 'asc' },
+    });
+    return classeIds ? eleves.map(({ adresse: _adresse, ...sansAdresse }) => sansAdresse) : eleves;
   }
 
   async update(ecoleId: string, id: string, dto: UpdateEleveDto) {
@@ -80,6 +90,24 @@ export class ElevesService {
     );
 
     return { ...eleve, absencesCount, solde };
+  }
+
+  // Fiche d'enseignant : limitée à l'identité, à la classe et aux absences (les notes s'obtiennent par le bulletin).
+  // Ni factures, ni solde, ni parents, ni origine de l'admission, ni adresse.
+  async ficheRestreinte(ecoleId: string, id: string) {
+    const { adresse: _adresse, ...eleve } = await this.prisma.eleve.findFirstOrThrow({
+      where: { id, ecoleId },
+      include: { inscriptions: { where: { statut: 'EN_COURS' }, include: { classe: { include: { niveau: true } } } } },
+    });
+    const anneeCourante = await this.prisma.anneeScolaire.findFirst({ where: { ecoleId, courante: true } });
+    const absencesCount = await this.prisma.absence.count({
+      where: {
+        eleveId: id,
+        statut: { in: ['ABSENT', 'RETARD'] },
+        ...(anneeCourante ? { anneeScolaireId: anneeCourante.id } : {}),
+      },
+    });
+    return { ...eleve, absencesCount };
   }
 
   findAllParents(ecoleId: string) {

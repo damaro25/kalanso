@@ -189,6 +189,7 @@ model Ecole {
   livres          Livre[]
   emprunts        Emprunt[]
   annulationsAdmission AnnulationAdmission[]
+  affectationsEnseignants AffectationEnseignant[]
 
   @@map("ecoles")
 }
@@ -301,6 +302,7 @@ model Classe {
   absences     Absence[]
   notes        Note[]
   creneaux     Creneau[]
+  affectations AffectationEnseignant[]
 
   @@unique([ecoleId, anneeScolaireId, nom])
   @@index([ecoleId])
@@ -331,6 +333,7 @@ model Personnel {
 
   utilisateur   Utilisateur?
   creneaux      Creneau[]
+  affectations  AffectationEnseignant[]
   bulletinsPaie BulletinPaie[]
 
   @@unique([ecoleId, matricule])
@@ -624,6 +627,24 @@ model Creneau {
   @@index([salleId, jour])
   @@index([ecoleId])
   @@map("creneaux")
+}
+
+// Classes confiées explicitement à un enseignant par la direction, en plus de celles où il a un créneau
+// dans l'emploi du temps. Les deux ensemble forment le périmètre auquel l'enseignant a accès.
+model AffectationEnseignant {
+  id          String    @id @default(cuid())
+  ecoleId     String
+  ecole       Ecole     @relation(fields: [ecoleId], references: [id])
+  personnelId String
+  personnel   Personnel @relation(fields: [personnelId], references: [id], onDelete: Cascade)
+  classeId    String
+  classe      Classe    @relation(fields: [classeId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([personnelId, classeId])
+  @@index([ecoleId])
+  @@index([classeId])
+  @@map("affectations_enseignants")
 }
 
 // ─────────────────────────────────────────────

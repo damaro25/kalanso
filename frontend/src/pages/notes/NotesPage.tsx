@@ -14,6 +14,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { IconDownload, IconEye } from '@tabler/icons-react';
 import { fetchClassesCourantes, fetchClasseEleves } from '../../api/classes';
+import { useAuth } from '../../auth/AuthContext';
 import {
   fetchMatieres,
   createMatiere,
@@ -32,6 +33,9 @@ const TRIMESTRES = [
 
 export function NotesPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  // Les matières se créent depuis la page Matières, réservée à la direction.
+  const peutCreerMatiere = user?.role === 'FONDATEUR' || user?.role === 'CHEF_ETABLISSEMENT';
   const { data: classes } = useQuery({ queryKey: ['classes', 'courante'], queryFn: fetchClassesCourantes });
   const [classeId, setClasseId] = useState<string | null>(null);
   const [trimestre, setTrimestre] = useState<string | null>('1');
@@ -127,7 +131,7 @@ export function NotesPage() {
         )}
       </Group>
 
-      {niveauId && (
+      {niveauId && peutCreerMatiere && (
         <Paper withBorder p="md">
           <Title order={4} mb="sm">
             Nouvelle matière pour ce niveau

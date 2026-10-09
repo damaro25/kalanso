@@ -83,3 +83,28 @@ export async function fetchSalaireEnseignant(personnelId: string): Promise<Salai
   const { data } = await apiClient.get(`/personnel/${personnelId}/salaire`);
   return data;
 }
+
+// Classes de l'année en cours auxquelles un enseignant a accès : celles de son emploi du temps et celles que la
+// direction lui a affectées. Un enseignant ne voit que ces classes et leurs élèves.
+export interface ClasseEnseignant {
+  classeId: string;
+  nom: string;
+  niveau: string;
+  viaEmploiDuTemps: boolean;
+  affectee: boolean;
+}
+
+export interface ClassesEnseignant {
+  anneeScolaire: { id: string; libelle: string } | null;
+  classes: ClasseEnseignant[];
+}
+
+export async function fetchClassesEnseignant(id: string): Promise<ClassesEnseignant> {
+  const { data } = await apiClient.get(`/personnel/${id}/classes`);
+  return data;
+}
+
+export async function definirClassesEnseignant(id: string, classeIds: string[]): Promise<ClassesEnseignant> {
+  const { data } = await apiClient.put(`/personnel/${id}/classes`, { classeIds });
+  return data;
+}

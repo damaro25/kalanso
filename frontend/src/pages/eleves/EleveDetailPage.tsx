@@ -11,10 +11,14 @@ import { telechargerBulletin, ouvrirBulletinPdf } from '../../api/notes';
 import { usePendingIds } from '../../offline/outbox';
 import { PayerInscription } from './PayerInscription';
 import { CarteScolaire } from './CarteScolaire';
+import { useAuth } from '../../auth/AuthContext';
 
 export function EleveDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  // Un enseignant reçoit une fiche restreinte (identité, classe, absences, bulletin) : ni finances, ni parents.
+  const estEnseignant = user?.role === 'ENSEIGNANT';
   const idsEnAttente = usePendingIds();
   const [selectedClasse, setSelectedClasse] = useState<string | null>(null);
   const [trimestreBulletin, setTrimestreBulletin] = useState<string | null>('1');
@@ -25,7 +29,7 @@ export function EleveDetailPage() {
     enabled: !!id,
   });
 
-  const { data: classes } = useQuery({ queryKey: ['classes', 'courante'], queryFn: fetchClassesCourantes });
+  const { data: classes } = useQuery({ queryKey: ['classes', 'courante'], queryFn: fetchClassesCourantes, enabled: !estEnseignant });
 
   const mutation = useMutation({
     mutationFn: (classeId: string) => inscrireEleve(id!, classeId),
@@ -73,7 +77,7 @@ export function EleveDetailPage() {
         )}
       </Group>
 
-      <SimpleGrid cols={{ base: 1, sm: 3 }}>
+      <SimpleGrid cols={{ base: 1, sm: estEnseignant ? 2 : 3 }}>
         <Paper withBorder p="md">
           <Text size="sm" c="dimmed">
             Classe actuelle
@@ -86,78 +90,84 @@ export function EleveDetailPage() {
           </Text>
           <Text fw={700}>{fiche.absencesCount}</Text>
         </Paper>
-        <Paper withBorder p="md">
-          <Text size="sm" c="dimmed">
-            Solde
-          </Text>
-          <Text fw={700} c={fiche.solde > 0 ? 'red' : 'green'}>
-            {fiche.solde.toLocaleString('fr-FR')} GNF
-          </Text>
-        </Paper>
+        {typeof fiche.solde === 'number' && (
+          <Paper withBorder p="md">
+            <Text size="sm" c="dimmed">
+              Solde
+            </Text>
+            <Text fw={700} c={fiche.solde > 0 ? 'red' : 'green'}>
+              {fiche.solde.toLocaleString('fr-FR')} GNF
+            </Text>
+          </Paper>
+        )}
       </SimpleGrid>
 
-      <Paper withBorder p="md">
-        <Title order={4} mb="sm">
-          Affecter à une classe
-        </Title>
-        <Group>
-          <Select
-            placeholder="Choisir une classe"
-            data={(classes ?? []).map((c) => ({ value: c.id, label: `${c.nom} (${c.niveau.nom})` }))}
-            value={selectedClasse}
-            onChange={setSelectedClasse}
-            w={{ base: '100%', sm: 280 }}
-          />
-          <Button disabled={!selectedClasse} loading={mutation.isPending} onClick={() => selectedClasse && mutation.mutate(selectedClasse)}>
-            Affecter
-          </Button>
-        </Group>
-      </Paper>
+      {!estEnseignant && (
+        <Paper withBorder p="md">
+          <Title order={4} mb="sm">
+            Affecter à une classe
+          </Title>
+          <Group>
+            <Select
+              placeholder="Choisir une classe"
+              data={(classes ?? []).map((c) => ({ value: c.id, label: `${c.nom} (${c.niveau.nom})` }))}
+              value={selectedClasse}
+              onChange={setSelectedClasse}
+              w={{ base: '100%', sm: 280 }}
+            />
+            <Button disabled={!selectedClasse} loading={mutation.isPending} onClick={() => selectedClasse && mutation.mutate(selectedClasse)}>
+              Affecter
+            </Button>
+          </Group>
+        </Paper>
+      )}
 
       <CarteScolaire eleveId={id!} />
 
       <PayerInscription eleveId={id!} aUneClasse={!!inscriptionActuelle} />
 
-      <Paper withBorder p="md">
-        <Title order={4} mb="sm">
-          Factures
-        </Title>
-        {fiche.factures.length === 0 && <Text c="dimmed">Aucune facture</Text>}
-        {fiche.factures.map((f: any) => (
-          <Stack key={f.id} mb="sm" gap={4}>
-            <Group justify="space-between">
-              <Text>
-                {f.libelle} — {Number(f.montantTotal).toLocaleString('fr-FR')} GNF ({f.statut})
-              </Text>
-              <Group gap="xs">
-                {(f.statut === 'IMPAYEE' || f.statut === 'PARTIELLE') && (
-                  <Button size="xs" onClick={() => setFactureIdPaiement(f.id)}>
-                    Encaisser
-                  </Button>
-                )}
-                <Button size="xs" variant="light" leftSection={<IconEye size={14} stroke={1.5} />} onClick={() => ouvrirFacturePdf(f.id)}>
-                  Voir la facture
-                </Button>
-              </Group>
-            </Group>
-            {f.paiements.length === 0 && (
-              <Text size="sm" c="dimmed" ml="md">
-                Aucun paiement enregistré
-              </Text>
-            )}
-            {f.paiements.map((p: any) => (
-              <Group key={p.id} justify="space-between" ml="md">
-                <Text size="sm" c="dimmed">
-                  {new Date(p.datePaiement).toLocaleDateString('fr-FR')} — {Number(p.montant).toLocaleString('fr-FR')} GNF ({p.mode})
+      {Array.isArray(fiche.factures) && (
+        <Paper withBorder p="md">
+          <Title order={4} mb="sm">
+            Factures
+          </Title>
+          {fiche.factures.length === 0 && <Text c="dimmed">Aucune facture</Text>}
+          {fiche.factures.map((f: any) => (
+            <Stack key={f.id} mb="sm" gap={4}>
+              <Group justify="space-between">
+                <Text>
+                  {f.libelle} — {Number(f.montantTotal).toLocaleString('fr-FR')} GNF ({f.statut})
                 </Text>
-                <Button size="xs" variant="subtle" leftSection={<IconEye size={14} stroke={1.5} />} onClick={() => ouvrirRecu(p.id)}>
-                  Voir le reçu
-                </Button>
+                <Group gap="xs">
+                  {(f.statut === 'IMPAYEE' || f.statut === 'PARTIELLE') && (
+                    <Button size="xs" onClick={() => setFactureIdPaiement(f.id)}>
+                      Encaisser
+                    </Button>
+                  )}
+                  <Button size="xs" variant="light" leftSection={<IconEye size={14} stroke={1.5} />} onClick={() => ouvrirFacturePdf(f.id)}>
+                    Voir la facture
+                  </Button>
+                </Group>
               </Group>
-            ))}
-          </Stack>
-        ))}
-      </Paper>
+              {f.paiements.length === 0 && (
+                <Text size="sm" c="dimmed" ml="md">
+                  Aucun paiement enregistré
+                </Text>
+              )}
+              {f.paiements.map((p: any) => (
+                <Group key={p.id} justify="space-between" ml="md">
+                  <Text size="sm" c="dimmed">
+                    {new Date(p.datePaiement).toLocaleDateString('fr-FR')} — {Number(p.montant).toLocaleString('fr-FR')} GNF ({p.mode})
+                  </Text>
+                  <Button size="xs" variant="subtle" leftSection={<IconEye size={14} stroke={1.5} />} onClick={() => ouvrirRecu(p.id)}>
+                    Voir le reçu
+                  </Button>
+                </Group>
+              ))}
+            </Stack>
+          ))}
+        </Paper>
+      )}
 
       <Paper withBorder p="md">
         <Title order={4} mb="sm">
@@ -190,62 +200,66 @@ export function EleveDetailPage() {
         </Group>
       </Paper>
 
-      <Paper withBorder p="md">
-        <Title order={4} mb="sm">
-          Parents / tuteurs
-        </Title>
-        {fiche.parentsLiens.length === 0 && <Text c="dimmed">Aucun parent lié</Text>}
-        {fiche.parentsLiens.map((lien: any) => (
-          <Badge key={lien.id} mr="xs">
-            {lien.parentTuteur.prenom} {lien.parentTuteur.nom} ({lien.lien})
-          </Badge>
-        ))}
-      </Paper>
+      {Array.isArray(fiche.parentsLiens) && (
+        <Paper withBorder p="md">
+          <Title order={4} mb="sm">
+            Parents / tuteurs
+          </Title>
+          {fiche.parentsLiens.length === 0 && <Text c="dimmed">Aucun parent lié</Text>}
+          {fiche.parentsLiens.map((lien: any) => (
+            <Badge key={lien.id} mr="xs">
+              {lien.parentTuteur.prenom} {lien.parentTuteur.nom} ({lien.lien})
+            </Badge>
+          ))}
+        </Paper>
+      )}
 
-      <Modal
-        opened={!!factureIdPaiement}
-        onClose={() => {
-          setFactureIdPaiement(null);
-          setDernierPaiementId(null);
-        }}
-        title="Enregistrer un paiement"
-      >
-        <Stack>
-          <NumberInput
-            label="Montant (GNF)"
-            value={montantPaiement}
-            onChange={(v) => setMontantPaiement(v === '' ? '' : Number(v))}
-          />
-          <Select
-            label="Mode de paiement"
-            data={[
-              { value: 'ESPECES', label: 'Espèces' },
-              { value: 'VIREMENT', label: 'Virement' },
-              { value: 'CHEQUE', label: 'Chèque' },
-              { value: 'AUTRE', label: 'Autre' },
-            ]}
-            value={modePaiement}
-            onChange={setModePaiement}
-          />
-          <Button disabled={!montantPaiement} loading={paiementMutation.isPending} onClick={() => paiementMutation.mutate()}>
-            Enregistrer le paiement
-          </Button>
-          {dernierPaiementId && (
-            <Tooltip
-              label="Disponible une fois le paiement synchronisé"
-              disabled={!idsEnAttente.has(dernierPaiementId)}
-            >
-              <Button
-                variant="light"
-                disabled={idsEnAttente.has(dernierPaiementId)}
-                onClick={() => ouvrirRecu(dernierPaiementId)}
+      {Array.isArray(fiche.factures) && (
+        <Modal
+          opened={!!factureIdPaiement}
+          onClose={() => {
+            setFactureIdPaiement(null);
+            setDernierPaiementId(null);
+          }}
+          title="Enregistrer un paiement"
+        >
+          <Stack>
+            <NumberInput
+              label="Montant (GNF)"
+              value={montantPaiement}
+              onChange={(v) => setMontantPaiement(v === '' ? '' : Number(v))}
+            />
+            <Select
+              label="Mode de paiement"
+              data={[
+                { value: 'ESPECES', label: 'Espèces' },
+                { value: 'VIREMENT', label: 'Virement' },
+                { value: 'CHEQUE', label: 'Chèque' },
+                { value: 'AUTRE', label: 'Autre' },
+              ]}
+              value={modePaiement}
+              onChange={setModePaiement}
+            />
+            <Button disabled={!montantPaiement} loading={paiementMutation.isPending} onClick={() => paiementMutation.mutate()}>
+              Enregistrer le paiement
+            </Button>
+            {dernierPaiementId && (
+              <Tooltip
+                label="Disponible une fois le paiement synchronisé"
+                disabled={!idsEnAttente.has(dernierPaiementId)}
               >
-                Voir le reçu du dernier paiement
-              </Button>
-            </Tooltip>
-          )}
-        </Stack>
-      </Modal>
+                <Button
+                  variant="light"
+                  disabled={idsEnAttente.has(dernierPaiementId)}
+                  onClick={() => ouvrirRecu(dernierPaiementId)}
+                >
+                  Voir le reçu du dernier paiement
+                </Button>
+              </Tooltip>
+            )}
+          </Stack>
+        </Modal>
+      )}
     </Stack>
   );
 }

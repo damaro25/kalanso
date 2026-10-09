@@ -16,10 +16,14 @@ import {
   type Effectif,
 } from '../../api/classes';
 import { correspond } from '../../lib/search';
+import { useAuth } from '../../auth/AuthContext';
 import { confirmerSuppression } from '../../lib/confirm';
 
 export function ClassesListPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  // Un enseignant consulte ses classes : ni création, ni modification, ni montants d'écolage.
+  const estEnseignant = user?.role === 'ENSEIGNANT';
   const { data: effectifs, isLoading } = useQuery({ queryKey: ['effectifs'], queryFn: fetchEffectifs });
   const { data: niveaux } = useQuery({ queryKey: ['niveaux'], queryFn: fetchNiveaux });
   const { data: annees } = useQuery({ queryKey: ['annees-scolaires'], queryFn: fetchAnneesScolaires });
@@ -125,103 +129,105 @@ export function ClassesListPage() {
     <Stack>
       <Title order={2}>Classes</Title>
 
-      <SimpleGrid cols={{ base: 1, md: 2 }}>
-        <Paper withBorder p="md">
-          <Title order={4} mb="sm">
-            Nouvelle classe
-          </Title>
-          <Stack gap="sm">
-            <Group>
-              <TextInput placeholder="Nom (ex: CM1 A)" value={nom} onChange={(e) => setNom(e.currentTarget.value)} />
-              <Select
-                placeholder="Niveau"
-                data={(niveaux ?? []).map((n) => ({ value: n.id, label: n.nom }))}
-                value={niveauId}
-                onChange={setNiveauId}
-              />
-            </Group>
-            <Group>
-              <Select
-                label="Année scolaire"
-                data={(annees ?? []).map((a) => ({ value: a.id, label: a.libelle + (a.courante ? ' (courante)' : '') }))}
-                value={anneeClasseId}
-                onChange={setAnneeSelectionnee}
-                w={{ base: '100%', sm: 220 }}
-              />
-              <Button
-                disabled={!nom || !niveauId || !anneeClasseId}
-                loading={mutation.isPending}
-                onClick={() =>
-                  niveauId &&
-                  anneeClasseId &&
-                  mutation.mutate({
-                    nom,
-                    niveauId,
-                    anneeScolaireId: anneeClasseId,
-                  })
-                }
-                mt={24}
-              >
-                Créer la classe
-              </Button>
-            </Group>
-          </Stack>
-        </Paper>
+      {!estEnseignant && (
+        <SimpleGrid cols={{ base: 1, md: 2 }}>
+          <Paper withBorder p="md">
+            <Title order={4} mb="sm">
+              Nouvelle classe
+            </Title>
+            <Stack gap="sm">
+              <Group>
+                <TextInput placeholder="Nom (ex: CM1 A)" value={nom} onChange={(e) => setNom(e.currentTarget.value)} />
+                <Select
+                  placeholder="Niveau"
+                  data={(niveaux ?? []).map((n) => ({ value: n.id, label: n.nom }))}
+                  value={niveauId}
+                  onChange={setNiveauId}
+                />
+              </Group>
+              <Group>
+                <Select
+                  label="Année scolaire"
+                  data={(annees ?? []).map((a) => ({ value: a.id, label: a.libelle + (a.courante ? ' (courante)' : '') }))}
+                  value={anneeClasseId}
+                  onChange={setAnneeSelectionnee}
+                  w={{ base: '100%', sm: 220 }}
+                />
+                <Button
+                  disabled={!nom || !niveauId || !anneeClasseId}
+                  loading={mutation.isPending}
+                  onClick={() =>
+                    niveauId &&
+                    anneeClasseId &&
+                    mutation.mutate({
+                      nom,
+                      niveauId,
+                      anneeScolaireId: anneeClasseId,
+                    })
+                  }
+                  mt={24}
+                >
+                  Créer la classe
+                </Button>
+              </Group>
+            </Stack>
+          </Paper>
 
-        <Paper withBorder p="md">
-          <Title order={4} mb="sm">
-            Nouvelle année scolaire
-          </Title>
-          <Text size="xs" c="dimmed" mb="sm">
-            Nécessaire pour préparer les classes de l'année suivante (ex: pour le passage de classe).
-          </Text>
-          <Stack gap="sm">
-            <TextInput
-              placeholder="Libellé (ex: 2026-2027)"
-              value={libelleAnnee}
-              onChange={(e) => setLibelleAnnee(e.currentTarget.value)}
-            />
-            <Group>
+          <Paper withBorder p="md">
+            <Title order={4} mb="sm">
+              Nouvelle année scolaire
+            </Title>
+            <Text size="xs" c="dimmed" mb="sm">
+              Nécessaire pour préparer les classes de l'année suivante (ex: pour le passage de classe).
+            </Text>
+            <Stack gap="sm">
               <TextInput
-                label="Début"
-                type="date"
-                value={dateDebutAnnee}
-                onChange={(e) => setDateDebutAnnee(e.currentTarget.value)}
+                placeholder="Libellé (ex: 2026-2027)"
+                value={libelleAnnee}
+                onChange={(e) => setLibelleAnnee(e.currentTarget.value)}
               />
-              <TextInput label="Fin" type="date" value={dateFinAnnee} onChange={(e) => setDateFinAnnee(e.currentTarget.value)} />
-            </Group>
-            <Button
-              disabled={!libelleAnnee || !dateDebutAnnee || !dateFinAnnee}
-              loading={anneeMutation.isPending}
-              onClick={() => anneeMutation.mutate({ libelle: libelleAnnee, dateDebut: dateDebutAnnee, dateFin: dateFinAnnee })}
-            >
-              Créer l'année scolaire
-            </Button>
+              <Group>
+                <TextInput
+                  label="Début"
+                  type="date"
+                  value={dateDebutAnnee}
+                  onChange={(e) => setDateDebutAnnee(e.currentTarget.value)}
+                />
+                <TextInput label="Fin" type="date" value={dateFinAnnee} onChange={(e) => setDateFinAnnee(e.currentTarget.value)} />
+              </Group>
+              <Button
+                disabled={!libelleAnnee || !dateDebutAnnee || !dateFinAnnee}
+                loading={anneeMutation.isPending}
+                onClick={() => anneeMutation.mutate({ libelle: libelleAnnee, dateDebut: dateDebutAnnee, dateFin: dateFinAnnee })}
+              >
+                Créer l'année scolaire
+              </Button>
 
-            {annees && annees.length > 0 && (
-              <Stack gap={6} mt="xs">
-                {annees.map((a) => (
-                  <Group key={a.id} justify="space-between">
-                    <Text size="sm">{a.libelle}</Text>
-                    {a.courante ? (
-                      <Badge color="kalanso">Courante</Badge>
-                    ) : (
-                      <Anchor
-                        component="button"
-                        type="button"
-                        size="sm"
-                        onClick={() => activerMutation.mutate(a.id)}
-                      >
-                        Définir comme courante
-                      </Anchor>
-                    )}
-                  </Group>
-                ))}
-              </Stack>
-            )}
-          </Stack>
-        </Paper>
-      </SimpleGrid>
+              {annees && annees.length > 0 && (
+                <Stack gap={6} mt="xs">
+                  {annees.map((a) => (
+                    <Group key={a.id} justify="space-between">
+                      <Text size="sm">{a.libelle}</Text>
+                      {a.courante ? (
+                        <Badge color="kalanso">Courante</Badge>
+                      ) : (
+                        <Anchor
+                          component="button"
+                          type="button"
+                          size="sm"
+                          onClick={() => activerMutation.mutate(a.id)}
+                        >
+                          Définir comme courante
+                        </Anchor>
+                      )}
+                    </Group>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </Paper>
+        </SimpleGrid>
+      )}
 
       <TextInput
         placeholder="Rechercher une classe par nom ou niveau..."
@@ -247,8 +253,8 @@ export function ClassesListPage() {
                 <Table.Th>Classe</Table.Th>
                 <Table.Th>Niveau</Table.Th>
                 <Table.Th>Année scolaire</Table.Th>
-                <Table.Th>Frais d'inscription</Table.Th>
-                <Table.Th>Écolage</Table.Th>
+                {!estEnseignant && <Table.Th>Frais d'inscription</Table.Th>}
+                {!estEnseignant && <Table.Th>Écolage</Table.Th>}
                 <Table.Th>Filles</Table.Th>
                 <Table.Th>Garçons</Table.Th>
                 <Table.Th>Total</Table.Th>
@@ -261,8 +267,8 @@ export function ClassesListPage() {
                   <Table.Td>{e.nom}</Table.Td>
                   <Table.Td>{e.niveau}</Table.Td>
                   <Table.Td>{e.anneeScolaire}</Table.Td>
-                  <Table.Td>{Number(e.fraisInscription).toLocaleString('fr-FR')} GNF</Table.Td>
-                  <Table.Td>{Number(e.ecolage).toLocaleString('fr-FR')} GNF</Table.Td>
+                  {!estEnseignant && <Table.Td>{Number(e.fraisInscription).toLocaleString('fr-FR')} GNF</Table.Td>}
+                  {!estEnseignant && <Table.Td>{Number(e.ecolage).toLocaleString('fr-FR')} GNF</Table.Td>}
                   <Table.Td>{e.filles}</Table.Td>
                   <Table.Td>{e.garcons}</Table.Td>
                   <Table.Td>{e.total}</Table.Td>
@@ -271,21 +277,25 @@ export function ClassesListPage() {
                       <Anchor component={Link} to={`/classes/${e.classeId}`}>
                         Voir les élèves
                       </Anchor>
-                      <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEdition(e)}>
-                        Modifier
-                      </Anchor>
-                      <Tooltip label="Impossible : des élèves sont inscrits dans cette classe" disabled={e.total === 0}>
-                        <Anchor
-                          component="button"
-                          type="button"
-                          size="sm"
-                          c={e.total === 0 ? 'red' : 'dimmed'}
-                          onClick={() => e.total === 0 && demanderSuppression(e)}
-                          style={e.total > 0 ? { cursor: 'not-allowed' } : undefined}
-                        >
-                          Supprimer
-                        </Anchor>
-                      </Tooltip>
+                      {!estEnseignant && (
+                        <>
+                          <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEdition(e)}>
+                            Modifier
+                          </Anchor>
+                          <Tooltip label="Impossible : des élèves sont inscrits dans cette classe" disabled={e.total === 0}>
+                            <Anchor
+                              component="button"
+                              type="button"
+                              size="sm"
+                              c={e.total === 0 ? 'red' : 'dimmed'}
+                              onClick={() => e.total === 0 && demanderSuppression(e)}
+                              style={e.total > 0 ? { cursor: 'not-allowed' } : undefined}
+                            >
+                              Supprimer
+                            </Anchor>
+                          </Tooltip>
+                        </>
+                      )}
                     </Group>
                   </Table.Td>
                 </Table.Tr>

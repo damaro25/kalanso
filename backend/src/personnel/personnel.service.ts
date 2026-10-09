@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePersonnelDto, UpdatePersonnelDto } from './dto/personnel.dto';
 
@@ -74,6 +74,65 @@ export class PersonnelService {
     if (courante) return courante.id;
     const derniere = await this.prisma.anneeScolaire.findFirst({ where: { ecoleId }, orderBy: { dateDebut: 'desc' } });
     return derniere?.id;
+  }
+
+  // Classes de l'année en cours auxquelles l'enseignant a accès : celles de son emploi du temps (automatique) et
+  // celles que la direction lui a affectées à la main. Une classe peut relever des deux.
+  async classesEnseignant(ecoleId: string, personnelId: string) {
+    await this.prisma.personnel.findFirstOrThrow({ where: { id: personnelId, ecoleId } });
+    const annee =
+      (await this.prisma.anneeScolaire.findFirst({ where: { ecoleId, courante: true } })) ??
+      (await this.prisma.anneeScolaire.findFirst({ where: { ecoleId }, orderBy: { dateDebut: 'desc' } }));
+    if (!annee) return { anneeScolaire: null, classes: [] };
+
+    const [creneaux, affectations] = await Promise.all([
+      this.prisma.creneau.findMany({
+        where: { ecoleId, personnelId, anneeScolaireId: annee.id },
+        select: { classe: { include: { niveau: true } } },
+      }),
+      this.prisma.affectationEnseignant.findMany({
+        where: { ecoleId, personnelId, classe: { anneeScolaireId: annee.id } },
+        select: { classe: { include: { niveau: true } } },
+      }),
+    ]);
+
+    const parClasse = new Map<string, { classeId: string; nom: string; niveau: string; viaEmploiDuTemps: boolean; affectee: boolean }>();
+    const noter = (classe: { id: string; nom: string; niveau: { nom: string } }, cle: 'viaEmploiDuTemps' | 'affectee') => {
+      const ligne = parClasse.get(classe.id) ?? { classeId: classe.id, nom: classe.nom, niveau: classe.niveau.nom, viaEmploiDuTemps: false, affectee: false };
+      ligne[cle] = true;
+      parClasse.set(classe.id, ligne);
+    };
+    creneaux.forEach((c) => noter(c.classe, 'viaEmploiDuTemps'));
+    affectations.forEach((a) => noter(a.classe, 'affectee'));
+
+    return {
+      anneeScolaire: { id: annee.id, libelle: annee.libelle },
+      classes: [...parClasse.values()].sort((a, b) => a.nom.localeCompare(b.nom, 'fr')),
+    };
+  }
+
+  // Remplace les affectations manuelles de l'enseignant pour l'année en cours. Les classes de son emploi du temps
+  // n'y figurent pas : elles restent accessibles sans affectation.
+  async definirAffectations(ecoleId: string, personnelId: string, classeIds: string[]) {
+    const personnel = await this.prisma.personnel.findFirstOrThrow({ where: { id: personnelId, ecoleId } });
+    if (personnel.type !== 'ENSEIGNANT') {
+      throw new BadRequestException("Seul un enseignant peut se voir affecter des classes");
+    }
+    const anneeScolaireId = await this.anneeReferenceId(ecoleId);
+    if (!anneeScolaireId) throw new BadRequestException('Aucune année scolaire définie');
+
+    const classes = classeIds.length
+      ? await this.prisma.classe.findMany({ where: { id: { in: classeIds }, ecoleId, anneeScolaireId, actif: true }, select: { id: true } })
+      : [];
+    if (classes.length !== new Set(classeIds).size) {
+      throw new BadRequestException("Une des classes n'existe pas ou n'appartient pas à l'année scolaire en cours");
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.affectationEnseignant.deleteMany({ where: { ecoleId, personnelId, classe: { anneeScolaireId } } }),
+      ...(classes.length ? [this.prisma.affectationEnseignant.createMany({ data: classes.map((c) => ({ ecoleId, personnelId, classeId: c.id })) })] : []),
+    ]);
+    return this.classesEnseignant(ecoleId, personnelId);
   }
 
   async findOne(ecoleId: string, id: string) {

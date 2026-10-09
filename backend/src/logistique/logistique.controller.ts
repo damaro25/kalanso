@@ -16,6 +16,7 @@ export class LogistiqueController {
   constructor(private service: LogistiqueService) {}
 
   @Get()
+  @Roles(...ROLES_GESTION)
   findAll(
     @CurrentUser() user: JwtPayloadUser,
     @Query('categorie') categorie?: string,
@@ -26,6 +27,7 @@ export class LogistiqueController {
   }
 
   @Get('resume')
+  @Roles(...ROLES_GESTION)
   resume(@CurrentUser() user: JwtPayloadUser) {
     return this.service.resume(user.ecoleId);
   }

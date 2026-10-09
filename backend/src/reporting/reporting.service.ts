@@ -14,23 +14,30 @@ export class ReportingService {
     return derniere;
   }
 
-  async dashboard(ecoleId: string) {
+  // `classeIds` non nul : périmètre d'un enseignant. Effectifs et absences de ses classes seulement ; ni effectif du
+  // personnel ni chiffres financiers.
+  async dashboard(ecoleId: string, classeIds: string[] | null = null) {
+    const restreint = classeIds !== null;
     const aujourdhui = new Date();
     aujourdhui.setHours(0, 0, 0, 0);
 
     const anneeCourante = await this.resoudreAnnee(ecoleId);
 
     const [totalEleves, totalPersonnel, facturesInscription, impayes, absencesDuJour] = await Promise.all([
-      this.prisma.inscription.count({ where: { ecoleId, anneeScolaireId: anneeCourante.id, statut: 'EN_COURS' } }),
-      this.prisma.personnel.count({ where: { ecoleId, actif: true } }),
+      this.prisma.inscription.count({
+        where: { ecoleId, anneeScolaireId: anneeCourante.id, statut: 'EN_COURS', ...(restreint ? { classeId: { in: classeIds } } : {}) },
+      }),
+      restreint ? Promise.resolve(0) : this.prisma.personnel.count({ where: { ecoleId, actif: true } }),
       this.prisma.facture.findMany({
         where: { ecoleId, anneeScolaireId: anneeCourante.id, type: 'INSCRIPTION', statut: { not: 'ANNULEE' } },
         select: { montantPaye: true },
+        take: restreint ? 0 : undefined, // aucun chiffre financier pour un enseignant : on ne lit rien
       }),
       this.prisma.facture.findMany({
         where: { ecoleId, anneeScolaireId: anneeCourante.id, statut: { in: ['IMPAYEE', 'PARTIELLE'] } },
+        take: restreint ? 0 : undefined,
       }),
-      this.prisma.absence.findMany({ where: { ecoleId, date: aujourdhui } }),
+      this.prisma.absence.findMany({ where: { ecoleId, date: aujourdhui, ...(restreint ? { classeId: { in: classeIds } } : {}) } }),
     ]);
 
     const fraisInscriptionEncaisse = facturesInscription.reduce((acc, f) => acc + Number(f.montantPaye), 0);
@@ -39,7 +46,8 @@ export class ReportingService {
     return {
       anneeScolaire: { id: anneeCourante.id, libelle: anneeCourante.libelle },
       totalEleves,
-      totalPersonnel,
+      totalPersonnel: restreint ? undefined : totalPersonnel,
+      perimetre: restreint ? { nbClasses: classeIds.length } : undefined,
       fraisInscription: {
         encaisse: fraisInscriptionEncaisse,
       },

@@ -7,8 +7,12 @@ import { fetchEleves } from '../../api/eleves';
 import { fetchClassesCourantes, fetchClasseEleves } from '../../api/classes';
 import { telechargerExportEleves } from '../../api/reporting';
 import { correspond } from '../../lib/search';
+import { useAuth } from '../../auth/AuthContext';
 
 export function ElevesListPage() {
+  const { user } = useAuth();
+  // Un élève naît d'une admission : le raccourci n'a de sens que pour ceux qui traitent les admissions.
+  const peutAdmettre = user?.role === 'FONDATEUR' || user?.role === 'CHEF_ETABLISSEMENT' || user?.role === 'SECRETAIRE';
   const [recherche, setRecherche] = useState('');
   const [classeId, setClasseId] = useState<string | null>(null);
 
@@ -38,9 +42,11 @@ export function ElevesListPage() {
           >
             Exporter (Excel)
           </Button>
-          <Button component={Link} to="/admissions">
-            Nouvel élève (via Admissions)
-          </Button>
+          {peutAdmettre && (
+            <Button component={Link} to="/admissions">
+              Nouvel élève (via Admissions)
+            </Button>
+          )}
         </Group>
       </Group>
 

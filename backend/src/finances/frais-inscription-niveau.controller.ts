@@ -5,6 +5,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayloadUser } from '../common/decorators/current-user.decorator';
 import { RoleUtilisateur } from '../generated/prisma/enums';
+import { ROLES_SANS_ENSEIGNANT } from '../common/roles.constants';
 import { FraisInscriptionNiveauService } from './frais-inscription-niveau.service';
 import { CreateFraisInscriptionNiveauDto, UpdateFraisInscriptionNiveauDto } from './dto/frais-inscription-niveau.dto';
 
@@ -16,6 +17,7 @@ export class FraisInscriptionNiveauController {
   constructor(private service: FraisInscriptionNiveauService) {}
 
   @Get()
+  @Roles(...ROLES_SANS_ENSEIGNANT)
   findAll(@CurrentUser() user: JwtPayloadUser) {
     return this.service.findAll(user.ecoleId);
   }

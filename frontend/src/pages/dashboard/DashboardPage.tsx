@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Title, SimpleGrid, Paper, Text, Group, Button, Stack } from '@mantine/core';
-import { IconDownload } from '@tabler/icons-react';
+import { Title, SimpleGrid, Paper, Text, Group, Button, Stack, Alert } from '@mantine/core';
+import { IconDownload, IconInfoCircle } from '@tabler/icons-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { fetchDashboard, telechargerExportEleves, telechargerExportImpayes } from '../../api/reporting';
 import { fetchTresorerieParMois } from '../../api/finance';
@@ -64,9 +64,17 @@ export function DashboardPage() {
         </Group>
       </Group>
 
-      <SimpleGrid cols={{ base: 2, md: voitTresorerie ? 5 : 3 }}>
-        <StatCard label="Élèves" value={String(data.totalEleves)} />
-        <StatCard label="Personnel" value={String(data.totalPersonnel)} />
+      {data.perimetre && data.perimetre.nbClasses === 0 && (
+        <Alert color="orange" variant="light" icon={<IconInfoCircle size={18} />}>
+          Aucune classe ne vous est encore affectée. Rapprochez-vous de la direction : vos classes sont celles de votre emploi du temps,
+          plus celles qu'elle vous confie.
+        </Alert>
+      )}
+
+      <SimpleGrid cols={{ base: 2, md: voitTresorerie ? 5 : data.perimetre ? 3 : 3 }}>
+        <StatCard label={data.perimetre ? 'Élèves de mes classes' : 'Élèves'} value={String(data.totalEleves)} />
+        {data.perimetre && <StatCard label="Mes classes" value={String(data.perimetre.nbClasses)} />}
+        {data.totalPersonnel !== undefined && <StatCard label="Personnel" value={String(data.totalPersonnel)} />}
         {voitTresorerie && data.fraisInscription && (
           <StatCard
             label="Frais d'inscription"

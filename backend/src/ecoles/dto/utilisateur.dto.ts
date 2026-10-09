@@ -44,6 +44,11 @@ export class UpdateUtilisateurDto {
   @IsBoolean()
   actif?: boolean;
 
+  // Fiche du personnel d'un compte enseignant ; `null` pour la retirer.
+  @IsOptional()
+  @IsString()
+  personnelId?: string | null;
+
   // Fournir un nouveau mot de passe seulement pour le réinitialiser.
   @IsOptional()
   @IsString()

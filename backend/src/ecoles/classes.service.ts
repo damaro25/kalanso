@@ -10,7 +10,8 @@ export class ClassesService {
   // suivi de parcours). Avec `courante`, seulement celles de l'année scolaire en cours (à défaut
   // d'année courante, la plus récente) : c'est la liste à proposer dans tous les filtres et
   // sélecteurs de classe, une classe d'une année passée n'ayant pas de sens au quotidien.
-  async findAll(ecoleId: string, options: { courante?: boolean } = {}) {
+  // `classeIds` non nul : périmètre d'un enseignant, on ne renvoie que ses classes.
+  async findAll(ecoleId: string, options: { courante?: boolean; classeIds?: string[] | null } = {}) {
     let anneeScolaireId: string | undefined;
     if (options.courante) {
       const annee =
@@ -21,7 +22,12 @@ export class ClassesService {
     }
 
     return this.prisma.classe.findMany({
-      where: { ecoleId, actif: true, ...(anneeScolaireId ? { anneeScolaireId } : {}) },
+      where: {
+        ecoleId,
+        actif: true,
+        ...(anneeScolaireId ? { anneeScolaireId } : {}),
+        ...(options.classeIds ? { id: { in: options.classeIds } } : {}),
+      },
       include: { niveau: true, anneeScolaire: true, _count: { select: { inscriptions: true } } },
       orderBy: [{ anneeScolaire: { dateDebut: 'desc' } }, { nom: 'asc' }],
     });
@@ -81,9 +87,10 @@ export class ClassesService {
     return inscriptions.map((i) => i.eleve);
   }
 
-  async effectifs(ecoleId: string) {
+  // Pour un enseignant (`classeIds` non nul) : ses classes seulement, sans les montants d'écolage ni de frais d'inscription.
+  async effectifs(ecoleId: string, classeIds: string[] | null = null) {
     const classes = await this.prisma.classe.findMany({
-      where: { ecoleId, actif: true },
+      where: { ecoleId, actif: true, ...(classeIds ? { id: { in: classeIds } } : {}) },
       include: {
         niveau: true,
         anneeScolaire: true,
@@ -116,8 +123,7 @@ export class ClassesService {
         nom: classe.nom,
         niveau: classe.niveau.nom,
         anneeScolaire: classe.anneeScolaire.libelle,
-        fraisInscription,
-        ecolage,
+        ...(classeIds ? {} : { fraisInscription, ecolage }),
         filles,
         garcons,
         total: filles + garcons,

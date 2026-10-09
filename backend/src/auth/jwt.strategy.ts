@@ -21,11 +21,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayloadUser): Promise<JwtPayloadUser> {
     const utilisateur = await this.prisma.utilisateur.findUnique({
       where: { id: payload.userId },
-      select: { id: true, ecoleId: true, role: true, email: true, actif: true },
+      select: { id: true, ecoleId: true, role: true, email: true, actif: true, personnelId: true },
     });
     if (!utilisateur || !utilisateur.actif) {
       throw new UnauthorizedException('Session expirée, reconnectez-vous');
     }
-    return { userId: utilisateur.id, ecoleId: utilisateur.ecoleId, role: utilisateur.role, email: utilisateur.email };
+    return {
+      userId: utilisateur.id,
+      ecoleId: utilisateur.ecoleId,
+      role: utilisateur.role,
+      email: utilisateur.email,
+      personnelId: utilisateur.personnelId,
+    };
   }
 }

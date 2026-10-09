@@ -32,6 +32,15 @@ describe('JwtStrategy.validate (session relue en base)', () => {
     expect(user).toEqual({ userId: 'u1', ecoleId: 'ecole-la-cible', role: 'FONDATEUR', email: 'fondateur@exemple.gn' });
   });
 
+  it("renvoie la fiche du personnel liée au compte, qui sert à retrouver les classes d'un enseignant", async () => {
+    prisma.utilisateur.findUnique.mockResolvedValue({ id: 'u1', ecoleId: 'e', role: 'ENSEIGNANT', email: 'x', actif: true, personnelId: 'p1' });
+
+    const user = await strategie.validate(ancienJeton);
+
+    expect(user.personnelId).toBe('p1');
+    expect(prisma.utilisateur.findUnique.mock.calls[0][0].select.personnelId).toBe(true);
+  });
+
   it("cherche la personne par l'identifiant du jeton, et seulement les champs utiles", async () => {
     prisma.utilisateur.findUnique.mockResolvedValue({ id: 'u1', ecoleId: 'e', role: 'FONDATEUR', email: 'x', actif: true });
 

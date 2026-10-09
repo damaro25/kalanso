@@ -5,6 +5,8 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayloadUser } from '../common/decorators/current-user.decorator';
 import { RoleUtilisateur } from '../generated/prisma/enums';
+import { ROLES_SANS_ENSEIGNANT } from '../common/roles.constants';
+import { PerimetreService } from '../common/perimetre/perimetre.service';
 import { ElevesService } from './eleves.service';
 import { UpdateEleveDto } from './dto/eleve.dto';
 import { CreateParentTuteurDto, LinkParentDto } from './dto/parent-tuteur.dto';
@@ -15,16 +17,21 @@ const ROLES_GESTION = [RoleUtilisateur.FONDATEUR, RoleUtilisateur.CHEF_ETABLISSE
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ElevesController {
-  constructor(private service: ElevesService) {}
+  constructor(
+    private service: ElevesService,
+    private perimetre: PerimetreService,
+  ) {}
 
+  // Un enseignant ne voit que les élèves de ses classes (voir PerimetreService).
   @Get('eleves')
-  findAll(@CurrentUser() user: JwtPayloadUser) {
-    return this.service.findAll(user.ecoleId);
+  async findAll(@CurrentUser() user: JwtPayloadUser) {
+    return this.service.findAll(user.ecoleId, await this.perimetre.classesAutorisees(user));
   }
 
   @Get('eleves/:id/fiche')
-  fiche(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string) {
-    return this.service.fiche(user.ecoleId, id);
+  async fiche(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string) {
+    await this.perimetre.exigerEleve(user, id);
+    return this.perimetre.estRestreint(user) ? this.service.ficheRestreinte(user.ecoleId, id) : this.service.fiche(user.ecoleId, id);
   }
 
   // La création directe d'un élève est volontairement retirée : un élève ne peut
@@ -44,6 +51,7 @@ export class ElevesController {
   }
 
   @Get('parents-tuteurs')
+  @Roles(...ROLES_SANS_ENSEIGNANT)
   findAllParents(@CurrentUser() user: JwtPayloadUser) {
     return this.service.findAllParents(user.ecoleId);
   }

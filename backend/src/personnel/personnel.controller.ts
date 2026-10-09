@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -7,6 +7,7 @@ import type { JwtPayloadUser } from '../common/decorators/current-user.decorator
 import { RoleUtilisateur } from '../generated/prisma/enums';
 import { PersonnelService } from './personnel.service';
 import { CreatePersonnelDto, UpdatePersonnelDto } from './dto/personnel.dto';
+import { AffecterClassesDto } from './dto/affectation.dto';
 
 const ROLES_GESTION = [RoleUtilisateur.FONDATEUR, RoleUtilisateur.CHEF_ETABLISSEMENT];
 
@@ -39,6 +40,16 @@ export class PersonnelController {
   @Delete('personnel/:id')
   remove(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string) {
     return this.service.remove(user.ecoleId, id);
+  }
+
+  @Get('personnel/:id/classes')
+  classesEnseignant(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string) {
+    return this.service.classesEnseignant(user.ecoleId, id);
+  }
+
+  @Put('personnel/:id/classes')
+  definirAffectations(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string, @Body() dto: AffecterClassesDto) {
+    return this.service.definirAffectations(user.ecoleId, id, dto.classeIds);
   }
 
   @Get('personnel/:id/salaire')

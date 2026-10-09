@@ -6,6 +6,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayloadUser } from '../common/decorators/current-user.decorator';
 import { RoleUtilisateur } from '../generated/prisma/enums';
+import { PerimetreService } from '../common/perimetre/perimetre.service';
 import { ReportingService } from './reporting.service';
 import { ExportService } from './export.service';
 
@@ -19,13 +20,15 @@ export class ReportingController {
   constructor(
     private reportingService: ReportingService,
     private exportService: ExportService,
+    private perimetre: PerimetreService,
   ) {}
 
   // Les effectifs et les absences sont pour tous ; les montants (frais d'inscription encaissés, impayés) restent
   // réservés aux mêmes rôles que l'API /finance : on les retire de la réponse pour les autres.
   @Get('dashboard')
   async dashboard(@CurrentUser() user: JwtPayloadUser) {
-    const donnees = await this.reportingService.dashboard(user.ecoleId);
+    // Un enseignant ne voit que les effectifs et les absences de ses classes.
+    const donnees = await this.reportingService.dashboard(user.ecoleId, await this.perimetre.classesAutorisees(user));
     if (ROLES_EXPORT_FINANCE.includes(user.role as RoleUtilisateur)) return donnees;
     const { fraisInscription: _fraisInscription, impayes: _impayes, ...sansMontants } = donnees;
     return sansMontants;
@@ -37,7 +40,8 @@ export class ReportingController {
     @Query('classeId') classeId: string | undefined,
     @Res() res: Response,
   ) {
-    const buffer = await this.exportService.elevesXlsx(user.ecoleId, classeId);
+    if (classeId) await this.perimetre.exigerClasse(user, classeId);
+    const buffer = await this.exportService.elevesXlsx(user.ecoleId, classeId, await this.perimetre.classesAutorisees(user));
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': 'attachment; filename="eleves.xlsx"',
@@ -96,6 +100,7 @@ export class ReportingController {
     @Query('trimestre') trimestre: string,
     @Res() res: Response,
   ) {
+    await this.perimetre.exigerEleve(user, eleveId);
     const buffer = await this.exportService.bulletinXlsx(user.ecoleId, eleveId, Number(trimestre ?? 1));
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -111,6 +116,7 @@ export class ReportingController {
     @Query('trimestre') trimestre: string,
     @Res() res: Response,
   ) {
+    await this.perimetre.exigerEleve(user, eleveId);
     const buffer = await this.exportService.bulletinPdf(user.ecoleId, eleveId, Number(trimestre ?? 1));
     res.set({
       'Content-Type': 'application/pdf',
@@ -126,6 +132,7 @@ export class ReportingController {
     @Query('date') date: string,
     @Res() res: Response,
   ) {
+    await this.perimetre.exigerClasse(user, classeId);
     const buffer = await this.exportService.appelXlsx(user.ecoleId, classeId, date);
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -187,6 +194,7 @@ export class ReportingController {
     @Query('classeId') classeId: string,
     @Res() res: Response,
   ) {
+    await this.perimetre.exigerClasse(user, classeId);
     const buffer = await this.exportService.emploiDuTempsXlsx(user.ecoleId, classeId);
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -201,6 +209,7 @@ export class ReportingController {
     @Query('classeId') classeId: string,
     @Res() res: Response,
   ) {
+    await this.perimetre.exigerClasse(user, classeId);
     const buffer = await this.exportService.emploiDuTempsPdf(user.ecoleId, classeId);
     res.set({
       'Content-Type': 'application/pdf',
@@ -216,6 +225,7 @@ export class ReportingController {
     @Query('trimestre') trimestre: string,
     @Res() res: Response,
   ) {
+    await this.perimetre.exigerClasse(user, classeId);
     const buffer = await this.exportService.notesClasseXlsx(user.ecoleId, classeId, Number(trimestre ?? 1));
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

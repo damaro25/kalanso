@@ -29,8 +29,9 @@ export interface Effectif {
   capaciteMax: number | null;
   niveau: string;
   anneeScolaire: string;
-  fraisInscription: string;
-  ecolage: string;
+  // Absents de la réponse pour un enseignant : les montants ne le concernent pas.
+  fraisInscription?: string;
+  ecolage?: string;
   filles: number;
   garcons: number;
   total: number;

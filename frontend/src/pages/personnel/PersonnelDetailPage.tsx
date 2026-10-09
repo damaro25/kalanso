@@ -25,6 +25,7 @@ import {
   type TypePersonnel,
 } from '../../api/personnel';
 import { JOURS } from '../../api/emploiDuTemps';
+import { ClassesEnseignant } from './ClassesEnseignant';
 
 export function PersonnelDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -202,6 +203,8 @@ export function PersonnelDetailPage() {
           </Table.ScrollContainer>
         )}
       </Paper>
+
+      {estEnseignant && <ClassesEnseignant personnelId={id!} />}
 
       {estEnseignant && salaire && (
         <Paper withBorder p="md">

@@ -69,10 +69,16 @@ export class ExportService {
     return derniere;
   }
 
-  async elevesXlsx(ecoleId: string, classeId?: string): Promise<Buffer> {
+  // `classeIds` non nul : périmètre d'un enseignant, seuls les élèves de ses classes sont exportés.
+  async elevesXlsx(ecoleId: string, classeId?: string, classeIds: string[] | null = null): Promise<Buffer> {
     const anneeCourante = await this.resoudreAnnee(ecoleId);
     const inscriptions = await this.prisma.inscription.findMany({
-      where: { ecoleId, anneeScolaireId: anneeCourante.id, statut: 'EN_COURS', ...(classeId ? { classeId } : {}) },
+      where: {
+        ecoleId,
+        anneeScolaireId: anneeCourante.id,
+        statut: 'EN_COURS',
+        ...(classeId ? { classeId } : classeIds ? { classeId: { in: classeIds } } : {}),
+      },
       include: { eleve: true, classe: true },
       orderBy: { eleve: { nom: 'asc' } },
     });

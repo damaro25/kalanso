@@ -93,9 +93,13 @@ export class AbsencesService {
     return this.prisma.absence.findMany({ where: { ecoleId, eleveId }, orderBy: { date: 'desc' } });
   }
 
-  async stats(ecoleId: string, classeId?: string) {
+  async stats(ecoleId: string, classeId?: string, classeIds: string[] | null = null) {
     const absences = await this.prisma.absence.findMany({
-      where: { ecoleId, classeId, statut: { in: ['ABSENT', 'RETARD'] } },
+      where: {
+        ecoleId,
+        classeId: classeId ?? (classeIds ? { in: classeIds } : undefined),
+        statut: { in: ['ABSENT', 'RETARD'] },
+      },
       include: { eleve: true },
     });
 

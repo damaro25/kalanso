@@ -3,7 +3,8 @@ import { apiClient } from './client';
 export interface DashboardData {
   anneeScolaire: { id: string; libelle: string };
   totalEleves: number;
-  totalPersonnel: number;
+  totalPersonnel?: number; // absent pour un enseignant
+  perimetre?: { nbClasses: number }; // présent pour un enseignant : nombre de ses classes
   // Absents de la réponse pour les rôles sans accès aux finances (secrétaire, enseignant).
   fraisInscription?: { encaisse: number };
   impayes?: { nombre: number; montant: number };
