@@ -19,7 +19,7 @@ import {
   Anchor,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconDownload, IconRefresh } from '@tabler/icons-react';
+import { IconDownload, IconPlus, IconRefresh } from '@tabler/icons-react';
 import { confirmerSuppression } from '../../lib/confirm';
 import {
   BarChart,
@@ -41,14 +41,18 @@ import {
   fetchElevesFinance,
   fetchCompteResultatParMois,
   fetchMouvements,
+  fetchTresorerieParMois,
   creerMouvement,
   supprimerMouvement,
   telechargerBilanFinancier,
   regenererFactures,
   type TypeMouvement,
 } from '../../api/finance';
+import { TresorerieTable } from './TresorerieTable';
+import { DepenseModal } from './DepenseModal';
+import { POSTES_DEPENSE } from './postes';
 
-const CATEGORIES_DEPENSE = ['Loyer', 'Fournitures', 'Équipement', 'Maintenance', 'Eau / Électricité', 'Transport', 'Impôts & taxes', 'Autre'];
+const CATEGORIES_DEPENSE = POSTES_DEPENSE;
 const CATEGORIES_RECETTE = ['Cantine', 'Transport', 'Vente fournitures', 'Don / Subvention', 'Autre'];
 
 function fmt(n: number) {
@@ -99,6 +103,11 @@ export function FinancePage() {
     queryFn: () => fetchCompteResultatParMois(anneeScolaireId),
     enabled: !!anneeScolaireId,
   });
+  const { data: tresorerie } = useQuery({
+    queryKey: ['finance-tresorerie', anneeScolaireId],
+    queryFn: () => fetchTresorerieParMois(anneeScolaireId),
+    enabled: !!anneeScolaireId,
+  });
   const { data: mouvements } = useQuery({
     queryKey: ['finance-mouvements', anneeScolaireId],
     queryFn: () => fetchMouvements(anneeScolaireId),
@@ -107,6 +116,7 @@ export function FinancePage() {
 
   // Modal ajout de mouvement
   const [modalOuvert, setModalOuvert] = useState(false);
+  const [depenseOuverte, setDepenseOuverte] = useState(false);
   const [type, setType] = useState<TypeMouvement>('DEPENSE');
   const [categorie, setCategorie] = useState<string | null>('Loyer');
   const [libelle, setLibelle] = useState('');
@@ -117,6 +127,8 @@ export function FinancePage() {
     queryClient.invalidateQueries({ queryKey: ['finance-dashboard'] });
     queryClient.invalidateQueries({ queryKey: ['finance-cr'] });
     queryClient.invalidateQueries({ queryKey: ['finance-mouvements'] });
+    queryClient.invalidateQueries({ queryKey: ['finance-tresorerie'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-tresorerie'] });
   }
 
   const creerMutation = useMutation({
@@ -169,6 +181,9 @@ export function FinancePage() {
           </Text>
         </div>
         <Group>
+          <Button color="red" leftSection={<IconPlus size={16} stroke={1.5} />} onClick={() => setDepenseOuverte(true)}>
+            Nouvelle dépense
+          </Button>
           <Button
             variant="light"
             leftSection={<IconRefresh size={16} stroke={1.5} />}
@@ -189,10 +204,10 @@ export function FinancePage() {
         <KpiCard label="Encaissé" value={`${fmt(dash.ecolage.totalEncaisse)} GNF`} color="green" />
         <KpiCard label="Reste à payer" value={`${fmt(dash.ecolage.totalRestant)} GNF`} color={dash.ecolage.totalRestant > 0 ? 'red' : 'green'} />
         <KpiCard
-          label="Solde net"
+          label="Écolage − salaires"
           value={`${fmt(dash.soldeNet)} GNF`}
           color={dash.soldeNet >= 0 ? 'green' : 'red'}
-          sub="encaissé − salaires cumulés"
+          sub="écolage encaissé − salaires cumulés (voir Résultat net plus bas)"
         />
       </SimpleGrid>
 
@@ -267,6 +282,9 @@ export function FinancePage() {
         </SimpleGrid>
       </Paper>
 
+      {/* Tableau de trésorerie : encaissements, décaissements, flux, trésorerie initiale/finale */}
+      {tresorerie && <TresorerieTable data={tresorerie} onAjouterDepense={() => setDepenseOuverte(true)} />}
+
       {/* Graphe recettes vs dépenses par mois */}
       <Paper withBorder p="md" h={320}>
         <Title order={4} mb="sm">
@@ -295,48 +313,50 @@ export function FinancePage() {
         </Group>
         {(mouvements?.length ?? 0) === 0 && <Text c="dimmed">Aucun mouvement enregistré.</Text>}
         {mouvements && mouvements.length > 0 && (
-          <Table striped>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Date</Table.Th>
-                <Table.Th>Type</Table.Th>
-                <Table.Th>Catégorie</Table.Th>
-                <Table.Th>Libellé</Table.Th>
-                <Table.Th>Montant</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {mouvements.map((m) => (
-                <Table.Tr key={m.id}>
-                  <Table.Td>{new Date(m.date).toLocaleDateString('fr-FR')}</Table.Td>
-                  <Table.Td>
-                    <Badge color={m.type === 'RECETTE' ? 'green' : 'red'}>
-                      {m.type === 'RECETTE' ? 'Recette' : 'Dépense'}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>{m.categorie}</Table.Td>
-                  <Table.Td>{m.libelle}</Table.Td>
-                  <Table.Td c={m.type === 'RECETTE' ? 'green' : 'red'}>{fmt(Number(m.montant))} GNF</Table.Td>
-                  <Table.Td>
-                    <Anchor
-                      component="button"
-                      type="button"
-                      c="red"
-                      onClick={() =>
-                        confirmerSuppression({
-                          message: `Voulez-vous vraiment supprimer le mouvement « ${m.libelle} » (${fmt(Number(m.montant))} GNF) ? Cette action est définitive.`,
-                          onConfirm: () => supprimerMutation.mutate(m.id),
-                        })
-                      }
-                    >
-                      Supprimer
-                    </Anchor>
-                  </Table.Td>
+          <Table.ScrollContainer minWidth={620}>
+            <Table striped>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Date</Table.Th>
+                  <Table.Th>Type</Table.Th>
+                  <Table.Th>Catégorie</Table.Th>
+                  <Table.Th>Libellé</Table.Th>
+                  <Table.Th>Montant</Table.Th>
+                  <Table.Th />
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {mouvements.map((m) => (
+                  <Table.Tr key={m.id}>
+                    <Table.Td>{new Date(m.date).toLocaleDateString('fr-FR')}</Table.Td>
+                    <Table.Td>
+                      <Badge color={m.type === 'RECETTE' ? 'green' : 'red'}>
+                        {m.type === 'RECETTE' ? 'Recette' : 'Dépense'}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>{m.categorie}</Table.Td>
+                    <Table.Td>{m.libelle}</Table.Td>
+                    <Table.Td c={m.type === 'RECETTE' ? 'green' : 'red'}>{fmt(Number(m.montant))} GNF</Table.Td>
+                    <Table.Td>
+                      <Anchor
+                        component="button"
+                        type="button"
+                        c="red"
+                        onClick={() =>
+                          confirmerSuppression({
+                            message: `Voulez-vous vraiment supprimer le mouvement « ${m.libelle} » (${fmt(Number(m.montant))} GNF) ? Cette action est définitive.`,
+                            onConfirm: () => supprimerMutation.mutate(m.id),
+                          })
+                        }
+                      >
+                        Supprimer
+                      </Anchor>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
         )}
       </Paper>
 
@@ -381,32 +401,34 @@ export function FinancePage() {
         </Title>
         {(recouvrement?.classes.length ?? 0) === 0 && <Text c="dimmed">Aucune donnée.</Text>}
         {recouvrement && recouvrement.classes.length > 0 && (
-          <Table striped>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Classe</Table.Th>
-                <Table.Th>Élèves</Table.Th>
-                <Table.Th>Facturé</Table.Th>
-                <Table.Th>Encaissé</Table.Th>
-                <Table.Th>Reste</Table.Th>
-                <Table.Th>Taux</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {recouvrement.classes.map((c) => (
-                <Table.Tr key={c.classeId}>
-                  <Table.Td>{c.classe}</Table.Td>
-                  <Table.Td>{c.nbEleves}</Table.Td>
-                  <Table.Td>{fmt(c.totalFacture)}</Table.Td>
-                  <Table.Td>{fmt(c.totalPaye)}</Table.Td>
-                  <Table.Td c={c.totalRestant > 0 ? 'red' : undefined}>{fmt(c.totalRestant)}</Table.Td>
-                  <Table.Td>
-                    <Badge color={c.taux >= 80 ? 'green' : c.taux >= 50 ? 'yellow' : 'red'}>{c.taux}%</Badge>
-                  </Table.Td>
+          <Table.ScrollContainer minWidth={620}>
+            <Table striped>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Classe</Table.Th>
+                  <Table.Th>Élèves</Table.Th>
+                  <Table.Th>Facturé</Table.Th>
+                  <Table.Th>Encaissé</Table.Th>
+                  <Table.Th>Reste</Table.Th>
+                  <Table.Th>Taux</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {recouvrement.classes.map((c) => (
+                  <Table.Tr key={c.classeId}>
+                    <Table.Td>{c.classe}</Table.Td>
+                    <Table.Td>{c.nbEleves}</Table.Td>
+                    <Table.Td>{fmt(c.totalFacture)}</Table.Td>
+                    <Table.Td>{fmt(c.totalPaye)}</Table.Td>
+                    <Table.Td c={c.totalRestant > 0 ? 'red' : undefined}>{fmt(c.totalRestant)}</Table.Td>
+                    <Table.Td>
+                      <Badge color={c.taux >= 80 ? 'green' : c.taux >= 50 ? 'yellow' : 'red'}>{c.taux}%</Badge>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
         )}
       </Paper>
 
@@ -425,32 +447,36 @@ export function FinancePage() {
         </Group>
         {(eleves?.eleves.length ?? 0) === 0 && <Text c="dimmed">Aucun élève dans cette catégorie.</Text>}
         {eleves && eleves.eleves.length > 0 && (
-          <Table striped>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Élève</Table.Th>
-                <Table.Th>Classe</Table.Th>
-                <Table.Th>Facturé</Table.Th>
-                <Table.Th>Payé</Table.Th>
-                <Table.Th>Reste</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {eleves.eleves.map((e) => (
-                <Table.Tr key={e.eleveId}>
-                  <Table.Td>
-                    {e.prenom} {e.nom}
-                  </Table.Td>
-                  <Table.Td>{e.classe}</Table.Td>
-                  <Table.Td>{fmt(e.totalFacture)}</Table.Td>
-                  <Table.Td>{fmt(e.totalPaye)}</Table.Td>
-                  <Table.Td c={e.reste > 0 ? 'red' : 'green'}>{fmt(e.reste)}</Table.Td>
+          <Table.ScrollContainer minWidth={620}>
+            <Table striped>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Élève</Table.Th>
+                  <Table.Th>Classe</Table.Th>
+                  <Table.Th>Facturé</Table.Th>
+                  <Table.Th>Payé</Table.Th>
+                  <Table.Th>Reste</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {eleves.eleves.map((e) => (
+                  <Table.Tr key={e.eleveId}>
+                    <Table.Td>
+                      {e.prenom} {e.nom}
+                    </Table.Td>
+                    <Table.Td>{e.classe}</Table.Td>
+                    <Table.Td>{fmt(e.totalFacture)}</Table.Td>
+                    <Table.Td>{fmt(e.totalPaye)}</Table.Td>
+                    <Table.Td c={e.reste > 0 ? 'red' : 'green'}>{fmt(e.reste)}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
         )}
       </Paper>
+
+      <DepenseModal opened={depenseOuverte} onClose={() => setDepenseOuverte(false)} tresorerie={tresorerie} />
 
       <Modal opened={modalOuvert} onClose={() => setModalOuvert(false)} title="Enregistrer un mouvement financier">
         <Stack>

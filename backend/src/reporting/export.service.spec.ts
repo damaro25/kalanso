@@ -127,6 +127,27 @@ describe('ExportService (exports Excel)', () => {
     });
   });
 
+  describe('cahierPaieXlsx', () => {
+    it('la masse salariale compte aussi les brouillons, rappelés à part', async () => {
+      const paie = {
+        findByMois: jest.fn().mockResolvedValue([
+          { personnel: { matricule: 'A01', nom: 'Touré', prenom: 'Makalé' }, statut: 'VALIDE', totalGains: 400, totalRetenues: 0, netAPayer: 400 },
+          { personnel: { matricule: null, nom: 'Bah', prenom: 'Aissatou' }, statut: 'BROUILLON', totalGains: 150, totalRetenues: 0, netAPayer: 150 },
+        ]),
+      };
+      const exports = new ExportService(prisma, {} as any, paie as any, {} as any, {} as any);
+
+      const sheet = await lire(await exports.cahierPaieXlsx('ecole', 9, 2026));
+
+      const l = lignes(sheet);
+      const masse = l.find((r) => String(r[3]).startsWith('MASSE SALARIALE'));
+      expect(masse?.[3]).toBe('MASSE SALARIALE (net) :');
+      expect(masse?.[6]).toBe(550); // 400 validés + 150 en brouillon
+      const brouillon = l.find((r) => String(r[3]).startsWith('dont brouillons'));
+      expect(brouillon?.[6]).toBe(150);
+    });
+  });
+
   describe('modèles d\'import', () => {
     it('le modèle de factures contient les colonnes attendues par FacturesService.importXlsx', async () => {
       const sheet = await lire(await service.factureModeleXlsx());

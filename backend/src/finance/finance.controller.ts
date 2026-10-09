@@ -57,9 +57,37 @@ export class FinanceController {
     return this.service.eleves(user.ecoleId, f, anneeScolaireId);
   }
 
+  @Get('statistiques-paiements')
+  statistiquesPaiements(
+    @CurrentUser() user: JwtPayloadUser,
+    @Query('anneeScolaireId') anneeScolaireId?: string,
+    @Query('niveauId') niveauId?: string,
+    @Query('classeId') classeId?: string,
+  ) {
+    return this.service.statistiquesPaiements(user.ecoleId, {
+      anneeScolaireId: anneeScolaireId || undefined,
+      niveauId: niveauId || undefined,
+      classeId: classeId || undefined,
+    });
+  }
+
+  @Get('bordereau-journalier')
+  bordereauJournalier(
+    @CurrentUser() user: JwtPayloadUser,
+    @Query('date') date?: string,
+    @Query('niveauId') niveauId?: string,
+  ) {
+    return this.service.bordereauJournalier(user.ecoleId, { date: date || undefined, niveauId: niveauId || undefined });
+  }
+
   @Get('compte-resultat-par-mois')
   compteResultatParMois(@CurrentUser() user: JwtPayloadUser, @Query('anneeScolaireId') anneeScolaireId?: string) {
     return this.service.compteResultatParMois(user.ecoleId, anneeScolaireId);
+  }
+
+  @Get('tresorerie-par-mois')
+  tresorerieParMois(@CurrentUser() user: JwtPayloadUser, @Query('anneeScolaireId') anneeScolaireId?: string) {
+    return this.service.tresorerieParMois(user.ecoleId, anneeScolaireId);
   }
 
   @Get('mouvements')
@@ -85,6 +113,38 @@ export class FinanceController {
   @Post('regenerer-factures')
   regenererFactures(@CurrentUser() user: JwtPayloadUser, @Query('anneeScolaireId') anneeScolaireId?: string) {
     return this.facturesService.regenererFacturesManquantes(user.ecoleId, anneeScolaireId);
+  }
+
+  @Get('export/bordereau-journalier.xlsx')
+  async exportBordereauJournalier(
+    @CurrentUser() user: JwtPayloadUser,
+    @Query('date') date: string | undefined,
+    @Query('niveauId') niveauId: string | undefined,
+    @Res() res: Response,
+  ) {
+    const { buffer, nomFichier } = await this.exportService.bordereauJournalierXlsx(user.ecoleId, {
+      date: date || undefined,
+      niveauId: niveauId || undefined,
+    });
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${nomFichier}"`,
+    });
+    res.send(buffer);
+  }
+
+  @Get('export/tresorerie.xlsx')
+  async exportTresorerie(
+    @CurrentUser() user: JwtPayloadUser,
+    @Query('anneeScolaireId') anneeScolaireId: string | undefined,
+    @Res() res: Response,
+  ) {
+    const { buffer, nomFichier } = await this.exportService.tresorerieXlsx(user.ecoleId, anneeScolaireId);
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${nomFichier}"`,
+    });
+    res.send(buffer);
   }
 
   @Get('export/bilan.xlsx')

@@ -547,7 +547,7 @@ export class ExportService {
 
     let row = 4;
     let masseSalariale = 0;
-    let brouillonExclu = 0;
+    let dontBrouillon = 0;
     for (const b of bulletins) {
       sheet.getRow(row).values = [
         b.personnel.matricule ?? '',
@@ -558,24 +558,23 @@ export class ExportService {
         Number(b.totalRetenues),
         Number(b.netAPayer),
       ];
-      if (b.statut === 'BROUILLON') {
-        brouillonExclu += Number(b.netAPayer);
-      } else {
-        masseSalariale += Number(b.netAPayer);
-      }
+      // Tout bulletin compte dès sa création (comme dans le bilan financier) ; le brouillon
+      // est seulement rappelé à part, pour savoir ce qui reste à valider.
+      masseSalariale += Number(b.netAPayer);
+      if (b.statut === 'BROUILLON') dontBrouillon += Number(b.netAPayer);
       row += 1;
     }
 
     row += 1;
-    sheet.getCell(`D${row}`).value = 'MASSE SALARIALE validée (net) :';
+    sheet.getCell(`D${row}`).value = 'MASSE SALARIALE (net) :';
     sheet.getCell(`D${row}`).font = { bold: true };
     sheet.getCell(`G${row}`).value = masseSalariale;
     sheet.getCell(`G${row}`).font = { bold: true };
 
-    if (brouillonExclu > 0) {
+    if (dontBrouillon > 0) {
       row += 1;
-      sheet.getCell(`D${row}`).value = 'dont brouillon, hors masse salariale :';
-      sheet.getCell(`G${row}`).value = brouillonExclu;
+      sheet.getCell(`D${row}`).value = 'dont brouillons, à valider :';
+      sheet.getCell(`G${row}`).value = dontBrouillon;
     }
 
     return workbook.xlsx.writeBuffer() as unknown as Promise<Buffer>;

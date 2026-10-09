@@ -3,6 +3,13 @@ import { Title, SimpleGrid, Paper, Text, Group, Button, Stack } from '@mantine/c
 import { IconDownload } from '@tabler/icons-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { fetchDashboard, telechargerExportEleves, telechargerExportImpayes } from '../../api/reporting';
+import { fetchTresorerieParMois } from '../../api/finance';
+import { useAuth } from '../../auth/AuthContext';
+import { TresorerieResume } from '../finance/TresorerieResume';
+import { StatistiquesPaiements } from './StatistiquesPaiements';
+
+// Mêmes rôles que l'API /finance (voir FinanceController) : les autres n'ont pas accès aux chiffres de trésorerie.
+const ROLES_FINANCE = ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'];
 
 function StatCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
@@ -18,7 +25,15 @@ function StatCard({ label, value, color }: { label: string; value: string; color
 }
 
 export function DashboardPage() {
+  const { user } = useAuth();
+  const voitTresorerie = !!user && ROLES_FINANCE.includes(user.role);
+
   const { data, isLoading } = useQuery({ queryKey: ['dashboard'], queryFn: fetchDashboard });
+  const { data: tresorerie } = useQuery({
+    queryKey: ['dashboard-tresorerie'],
+    queryFn: () => fetchTresorerieParMois(),
+    enabled: voitTresorerie,
+  });
 
   if (isLoading || !data) return <p>Chargement...</p>;
 
@@ -62,6 +77,10 @@ export function DashboardPage() {
         />
         <StatCard label="Absences aujourd'hui" value={String(data.absencesAujourdhui.absents)} color="orange" />
       </SimpleGrid>
+
+      {voitTresorerie && <StatistiquesPaiements />}
+
+      {voitTresorerie && tresorerie && <TresorerieResume data={tresorerie} />}
 
       <Paper withBorder p="md" h={300}>
         <Title order={4} mb="sm">
