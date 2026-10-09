@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons.svg'],
       manifest: {
-        name: 'Kalanso',
-        short_name: 'Kalanso',
+        name: 'La cible du formateur',
+        short_name: 'La cible du formateur',
         description: "Plateforme de gestion scolaire pour les écoles privées guinéennes",
         theme_color: '#17ae89',
         background_color: '#ffffff',

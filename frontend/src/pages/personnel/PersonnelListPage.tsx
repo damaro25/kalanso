@@ -42,30 +42,32 @@ export function PersonnelListPage() {
       )}
 
       {personnel && personnelFiltre.length > 0 && (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Nom</Table.Th>
-              <Table.Th>Prénom</Table.Th>
-              <Table.Th>Fonction</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {personnelFiltre.map((p) => (
-              <Table.Tr key={p.id}>
-                <Table.Td>{p.nom}</Table.Td>
-                <Table.Td>{p.prenom}</Table.Td>
-                <Table.Td>{p.fonction}</Table.Td>
-                <Table.Td>
-                  <Anchor component={Link} to={`/personnel/${p.id}`}>
-                    Voir la fiche
-                  </Anchor>
-                </Table.Td>
+        <Table.ScrollContainer minWidth={620}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Nom</Table.Th>
+                <Table.Th>Prénom</Table.Th>
+                <Table.Th>Fonction</Table.Th>
+                <Table.Th />
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {personnelFiltre.map((p) => (
+                <Table.Tr key={p.id}>
+                  <Table.Td>{p.nom}</Table.Td>
+                  <Table.Td>{p.prenom}</Table.Td>
+                  <Table.Td>{p.fonction}</Table.Td>
+                  <Table.Td>
+                    <Anchor component={Link} to={`/personnel/${p.id}`}>
+                      Voir la fiche
+                    </Anchor>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
     </>
   );

@@ -3,14 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Title, Select, Table, Button, Group, SegmentedControl, Stack } from '@mantine/core';
 import { IconDownload } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
-import { fetchClasses, fetchClasseEleves } from '../../api/classes';
+import { fetchClassesCourantes, fetchClasseEleves } from '../../api/classes';
 import { fetchAbsences, enregistrerAppel, telechargerAppelXlsx, type StatutAbsence } from '../../api/absences';
 
 const AUJOURD_HUI = new Date().toISOString().slice(0, 10);
 
 export function AppelDuJourPage() {
   const queryClient = useQueryClient();
-  const { data: classes } = useQuery({ queryKey: ['classes'], queryFn: fetchClasses });
+  const { data: classes } = useQuery({ queryKey: ['classes', 'courante'], queryFn: fetchClassesCourantes });
   const [classeId, setClasseId] = useState<string | null>(null);
   const [statuts, setStatuts] = useState<Record<string, StatutAbsence>>({});
 
@@ -58,7 +58,7 @@ export function AppelDuJourPage() {
           data={(classes ?? []).map((c) => ({ value: c.id, label: `${c.nom} (${c.niveau.nom})` }))}
           value={classeId}
           onChange={setClasseId}
-          w={280}
+          w={{ base: '100%', sm: 280 }}
         />
         {classeId && (
           <Button variant="light" leftSection={<IconDownload size={16} stroke={1.5} />} onClick={() => telechargerAppelXlsx(classeId, AUJOURD_HUI)}>
@@ -69,34 +69,36 @@ export function AppelDuJourPage() {
 
       {classeId && eleves && (
         <>
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Élève</Table.Th>
-                <Table.Th>Statut</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {eleves.map((e: any) => (
-                <Table.Tr key={e.id}>
-                  <Table.Td>
-                    {e.prenom} {e.nom}
-                  </Table.Td>
-                  <Table.Td>
-                    <SegmentedControl
-                      value={statuts[e.id] ?? 'PRESENT'}
-                      onChange={(value) => setStatuts((prev) => ({ ...prev, [e.id]: value as StatutAbsence }))}
-                      data={[
-                        { label: 'Présent', value: 'PRESENT' },
-                        { label: 'Absent', value: 'ABSENT' },
-                        { label: 'Retard', value: 'RETARD' },
-                      ]}
-                    />
-                  </Table.Td>
+          <Table.ScrollContainer minWidth={620}>
+            <Table striped highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Élève</Table.Th>
+                  <Table.Th>Statut</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {eleves.map((e: any) => (
+                  <Table.Tr key={e.id}>
+                    <Table.Td>
+                      {e.prenom} {e.nom}
+                    </Table.Td>
+                    <Table.Td>
+                      <SegmentedControl
+                        value={statuts[e.id] ?? 'PRESENT'}
+                        onChange={(value) => setStatuts((prev) => ({ ...prev, [e.id]: value as StatutAbsence }))}
+                        data={[
+                          { label: 'Présent', value: 'PRESENT' },
+                          { label: 'Absent', value: 'ABSENT' },
+                          { label: 'Retard', value: 'RETARD' },
+                        ]}
+                      />
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
           <Group>
             <Button loading={mutation.isPending} onClick={() => mutation.mutate()}>
               Enregistrer l'appel

@@ -8,6 +8,7 @@ import { ModalsProvider } from '@mantine/modals';
 import { registerSW } from 'virtual:pwa-register';
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
+import './tactile.css';
 import App from './App.tsx';
 import { theme } from './theme';
 import { setQueryClient } from './offline/queryClientRef';
@@ -45,7 +46,7 @@ const updateSW = registerSW({
       return;
     }
     notifications.show({
-      title: 'Mise à jour de Kalanso',
+      title: 'Mise à jour de La cible du formateur',
       message: 'Une nouvelle version est disponible, elle va s\'appliquer automatiquement dans quelques secondes.',
       color: 'kalanso',
       autoClose: 6000,

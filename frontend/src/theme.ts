@@ -1,7 +1,7 @@
 import { createTheme, type MantineColorsTuple } from '@mantine/core';
 
 // Vert-émeraude : confiance et sérieux (finances, administration) sans la froideur
-// du bleu par défaut — couleur de marque de Kalanso.
+// du bleu par défaut — couleur de marque de La cible du formateur.
 const kalanso: MantineColorsTuple = [
   '#eafbf6',
   '#d3f4ea',

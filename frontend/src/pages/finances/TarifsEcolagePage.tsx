@@ -166,7 +166,7 @@ export function TarifsEcolagePage() {
             data={(annees ?? []).map((a) => ({ value: a.id, label: a.libelle + (a.courante ? ' (courante)' : '') }))}
             value={anneeSelectionnee}
             onChange={setAnneeScolaireId}
-            w={180}
+            w={{ base: '100%', sm: 180 }}
           />
           <NumberInput placeholder="Montant (GNF)" value={montant} onChange={(v) => setMontant(v === '' ? '' : Number(v))} />
           <Button
@@ -182,42 +182,45 @@ export function TarifsEcolagePage() {
       {isLoading && <p>Chargement...</p>}
 
       {tarifs && (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Niveau</Table.Th>
-              <Table.Th>Année scolaire</Table.Th>
-              <Table.Th>Libellé</Table.Th>
-              <Table.Th>Montant</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {tarifs.map((t) => (
-              <Table.Tr key={t.id}>
-                <Table.Td>{t.niveau.nom}</Table.Td>
-                <Table.Td>{t.anneeScolaire?.libelle ?? '—'}</Table.Td>
-                <Table.Td>{t.libelle}</Table.Td>
-                <Table.Td>{Number(t.montant).toLocaleString('fr-FR')} GNF</Table.Td>
-                <Table.Td>
-                  <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEditionTarif(t)}>
-                    Modifier
-                  </Anchor>
-                </Table.Td>
+        <Table.ScrollContainer minWidth={620}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Niveau</Table.Th>
+                <Table.Th>Année scolaire</Table.Th>
+                <Table.Th>Libellé</Table.Th>
+                <Table.Th>Montant</Table.Th>
+                <Table.Th />
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {tarifs.map((t) => (
+                <Table.Tr key={t.id}>
+                  <Table.Td>{t.niveau.nom}</Table.Td>
+                  <Table.Td>{t.anneeScolaire?.libelle ?? '—'}</Table.Td>
+                  <Table.Td>{t.libelle}</Table.Td>
+                  <Table.Td>{Number(t.montant).toLocaleString('fr-FR')} GNF</Table.Td>
+                  <Table.Td>
+                    <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEditionTarif(t)}>
+                      Modifier
+                    </Anchor>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
 
       <Title order={2} mt="lg">
         Frais d'inscription par niveau
       </Title>
       <Text size="sm" c="dimmed">
-        Montant facturé à l'inscription de tout élève admis dans une classe de ce niveau, pour l'année
-        scolaire concernée. Un seul montant par niveau et par année scolaire. Le montant de
-        réinscription (optionnel) s'applique aux élèves déjà inscrits une année antérieure ; s'il n'est
-        pas défini, le montant "Nouveaux" s'applique à tous.
+        Montant facturé à l'admission de tout élève dans une classe de ce niveau, pour l'année scolaire
+        concernée. Un seul montant par niveau et par année scolaire. Le montant de réinscription
+        (optionnel) s'applique aux élèves déjà inscrits une année antérieure ; s'il n'est pas défini, le
+        montant "Nouveaux" s'applique à tous. L'admission ne l'encaisse pas : il se règle ensuite avec
+        l'option « Payer l'inscription » de la fiche de l'élève.
       </Text>
 
       <Paper withBorder p="md">
@@ -236,7 +239,7 @@ export function TarifsEcolagePage() {
             data={(annees ?? []).map((a) => ({ value: a.id, label: a.libelle + (a.courante ? ' (courante)' : '') }))}
             value={anneeSelectionneeInscription}
             onChange={setAnneeScolaireIdInscription}
-            w={180}
+            w={{ base: '100%', sm: 180 }}
           />
           <NumberInput
             placeholder="Nouveaux (GNF)"
@@ -265,36 +268,38 @@ export function TarifsEcolagePage() {
       )}
 
       {fraisInscription && fraisInscription.length > 0 && (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Niveau</Table.Th>
-              <Table.Th>Année scolaire</Table.Th>
-              <Table.Th>Nouveaux</Table.Th>
-              <Table.Th>Réinscription</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {fraisInscription.map((f) => (
-              <Table.Tr key={f.id}>
-                <Table.Td>{f.niveau.nom}</Table.Td>
-                <Table.Td>{f.anneeScolaire?.libelle ?? '—'}</Table.Td>
-                <Table.Td>{Number(f.montant).toLocaleString('fr-FR')} GNF</Table.Td>
-                <Table.Td>
-                  {f.montantReinscription === null
-                    ? '= Nouveaux'
-                    : `${Number(f.montantReinscription).toLocaleString('fr-FR')} GNF`}
-                </Table.Td>
-                <Table.Td>
-                  <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEditionFrais(f)}>
-                    Modifier
-                  </Anchor>
-                </Table.Td>
+        <Table.ScrollContainer minWidth={620}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Niveau</Table.Th>
+                <Table.Th>Année scolaire</Table.Th>
+                <Table.Th>Nouveaux</Table.Th>
+                <Table.Th>Réinscription</Table.Th>
+                <Table.Th />
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {fraisInscription.map((f) => (
+                <Table.Tr key={f.id}>
+                  <Table.Td>{f.niveau.nom}</Table.Td>
+                  <Table.Td>{f.anneeScolaire?.libelle ?? '—'}</Table.Td>
+                  <Table.Td>{Number(f.montant).toLocaleString('fr-FR')} GNF</Table.Td>
+                  <Table.Td>
+                    {f.montantReinscription === null
+                      ? '= Nouveaux'
+                      : `${Number(f.montantReinscription).toLocaleString('fr-FR')} GNF`}
+                  </Table.Td>
+                  <Table.Td>
+                    <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEditionFrais(f)}>
+                      Modifier
+                    </Anchor>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
 
       <Modal opened={!!tarifEnEdition} onClose={() => setTarifEnEdition(null)} title="Modifier le tarif">

@@ -1,0 +1,15 @@
+/* Écrans tactiles : cibles d'au moins 36 px de haut pour les actions des tableaux
+   (« Modifier », « Supprimer ») et les petites icônes, trop serrées au doigt sinon. */
+@media (pointer: coarse) {
+  button.mantine-Anchor-root {
+    min-height: 36px;
+    padding-inline: 8px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .mantine-ActionIcon-root {
+    min-width: 36px;
+    min-height: 36px;
+  }
+}

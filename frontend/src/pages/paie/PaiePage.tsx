@@ -210,9 +210,9 @@ export function PaiePage() {
     e.target.value = '';
   }
 
-  const masseSalarialeValidee = (bulletins ?? [])
-    .filter((b) => b.statut !== 'BROUILLON')
-    .reduce((a, b) => a + Number(b.netAPayer), 0);
+  // Tout bulletin compte dès sa création (comme dans le bilan financier) ; le brouillon est
+  // seulement rappelé à part, pour savoir ce qui reste à valider.
+  const masseSalariale = (bulletins ?? []).reduce((a, b) => a + Number(b.netAPayer), 0);
   const masseSalarialeBrouillon = (bulletins ?? [])
     .filter((b) => b.statut === 'BROUILLON')
     .reduce((a, b) => a + Number(b.netAPayer), 0);
@@ -222,7 +222,7 @@ export function PaiePage() {
       <Title order={2}>Paie du personnel</Title>
 
       <Group>
-        <Select data={MOIS} value={mois} onChange={setMois} w={150} />
+        <Select data={MOIS} value={mois} onChange={setMois} w={{ base: '100%', sm: 150 }} />
         <Select data={ANNEES} value={annee} onChange={setAnnee} w={110} />
         <Button onClick={() => { reset(); setModalOuvert(true); }}>Nouveau bulletin</Button>
         {bulletins && bulletins.length > 0 && (
@@ -258,62 +258,63 @@ export function PaiePage() {
 
       {bulletins && bulletins.length > 0 && (
         <>
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Matricule</Table.Th>
-                <Table.Th>Employé</Table.Th>
-                <Table.Th>Gains</Table.Th>
-                <Table.Th>Retenues</Table.Th>
-                <Table.Th>Net à payer</Table.Th>
-                <Table.Th>Statut</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {bulletins.map((b) => (
-                <Table.Tr key={b.id}>
-                  <Table.Td>{b.personnel.matricule ?? '—'}</Table.Td>
-                  <Table.Td>{b.personnel.prenom} {b.personnel.nom}</Table.Td>
-                  <Table.Td>{Number(b.totalGains).toLocaleString('fr-FR')}</Table.Td>
-                  <Table.Td>{Number(b.totalRetenues).toLocaleString('fr-FR')}</Table.Td>
-                  <Table.Td>
-                    <strong>{Number(b.netAPayer).toLocaleString('fr-FR')} GNF</strong>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge color={STATUT_COLORS[b.statut]}>{b.statut}</Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <Button
-                        size="xs"
-                        variant="light"
-                        leftSection={<IconEye size={14} stroke={1.5} />}
-                        onClick={() => ouvrirBulletinPaiePdf(b.id)}
-                      >
-                        Voir le bulletin
-                      </Button>
-                      {b.statut === 'BROUILLON' && (
+          <Table.ScrollContainer minWidth={620}>
+            <Table striped highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Matricule</Table.Th>
+                  <Table.Th>Employé</Table.Th>
+                  <Table.Th>Gains</Table.Th>
+                  <Table.Th>Retenues</Table.Th>
+                  <Table.Th>Net à payer</Table.Th>
+                  <Table.Th>Statut</Table.Th>
+                  <Table.Th />
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {bulletins.map((b) => (
+                  <Table.Tr key={b.id}>
+                    <Table.Td>{b.personnel.matricule ?? '—'}</Table.Td>
+                    <Table.Td>{b.personnel.prenom} {b.personnel.nom}</Table.Td>
+                    <Table.Td>{Number(b.totalGains).toLocaleString('fr-FR')}</Table.Td>
+                    <Table.Td>{Number(b.totalRetenues).toLocaleString('fr-FR')}</Table.Td>
+                    <Table.Td>
+                      <strong>{Number(b.netAPayer).toLocaleString('fr-FR')} GNF</strong>
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge color={STATUT_COLORS[b.statut]}>{b.statut}</Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs">
                         <Button
                           size="xs"
-                          color="blue"
-                          loading={validerMutation.isPending}
-                          onClick={() => validerMutation.mutate(b.id)}
+                          variant="light"
+                          leftSection={<IconEye size={14} stroke={1.5} />}
+                          onClick={() => ouvrirBulletinPaiePdf(b.id)}
                         >
-                          Valider
+                          Voir le bulletin
                         </Button>
-                      )}
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-          <Text fw={700}>Masse salariale validée (net) : {masseSalarialeValidee.toLocaleString('fr-FR')} GNF</Text>
+                        {b.statut === 'BROUILLON' && (
+                          <Button
+                            size="xs"
+                            color="blue"
+                            loading={validerMutation.isPending}
+                            onClick={() => validerMutation.mutate(b.id)}
+                          >
+                            Valider
+                          </Button>
+                        )}
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+          <Text fw={700}>Masse salariale (net) : {masseSalariale.toLocaleString('fr-FR')} GNF</Text>
           {masseSalarialeBrouillon > 0 && (
             <Text size="sm" c="dimmed">
-              + {masseSalarialeBrouillon.toLocaleString('fr-FR')} GNF en brouillon (non comptés dans le module Finance
-              tant qu'ils ne sont pas validés)
+              dont {masseSalarialeBrouillon.toLocaleString('fr-FR')} GNF en brouillon (comptés dans le bilan financier, à valider)
             </Text>
           )}
         </>
@@ -360,7 +361,7 @@ export function PaiePage() {
                 const cle = `${l.classeId}|${l.matiereId}`;
                 return (
                   <Group key={cle} justify="space-between">
-                    <Text size="sm" w={260}>
+                    <Text size="sm" w={{ base: '100%', sm: 260 }}>
                       {l.classe} — {l.matiere}{' '}
                       <Text span size="xs" c="dimmed">
                         ({l.tauxHoraire.toLocaleString('fr-FR')} GNF/h)
@@ -404,7 +405,7 @@ export function PaiePage() {
           <Divider label="Lignes additionnelles" />
           {lignes.map((ligne, i) => (
             <Group key={ligne.libelle} justify="space-between">
-              <Text w={180}>
+              <Text w={{ base: '100%', sm: 180 }}>
                 {ligne.libelle}{' '}
                 <Badge size="xs" color={ligne.sens === 'GAIN' ? 'green' : 'red'}>
                   {ligne.sens === 'GAIN' ? 'gain' : 'retenue'}
@@ -416,7 +417,7 @@ export function PaiePage() {
                 onChange={(v) =>
                   setLignes((prev) => prev.map((l, j) => (j === i ? { ...l, montant: v === '' ? '' : Number(v) } : l)))
                 }
-                w={180}
+                w={{ base: '100%', sm: 180 }}
                 min={0}
               />
             </Group>

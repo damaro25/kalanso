@@ -1,4 +1,4 @@
-﻿# Plan pilote Kalanso - Les Ecoles La Cible du Formateur
+﻿# Plan pilote La cible du formateur - Les Ecoles La Cible du Formateur
 
 Date de preparation : 2026-07-03
 Statut : ecole candidate supplementaire, distincte des 3 ecoles pilotes initiales
@@ -12,7 +12,7 @@ Decision recommandee : demarrer par un pilote cadre sur un seul campus prioritai
 
 ## 2. Objectif principal
 
-Verifier que Kalanso peut remplacer progressivement la gestion papier actuelle par une gestion numerique fiable sur les processus essentiels :
+Verifier que La cible du formateur peut remplacer progressivement la gestion papier actuelle par une gestion numerique fiable sur les processus essentiels :
 
 - Identification de l'etablissement et des campus
 - Gestion des eleves et inscriptions
@@ -135,7 +135,7 @@ Ces elements doivent rester dans la feuille de route, mais pas dans le pilote in
 - Referent pedagogique : directeur pedagogique ou censeur
 - Utilisateurs test : 2 enseignants, 1 secretaire, 1 comptable, 1 membre de direction
 
-## 6. Roles cote Kalanso
+## 6. Roles cote La cible du formateur
 
 - Responsable produit : Laby Damaro
 - Responsable technique : Laby Damaro ou personne deleguee
@@ -157,14 +157,14 @@ Livrable : fiche de qualification ecole.
 
 - Recuperer les listes eleves, classes, personnel et tarifs
 - Nettoyer les donnees dans un fichier Excel standard
-- Creer le compte ecole dans Kalanso
+- Creer le compte ecole dans La cible du formateur
 - Configurer annee scolaire, classes, niveaux, utilisateurs
 
 Livrable : base initiale prete pour import ou saisie.
 
 ### Semaine 2 : Installation et formation
 
-- Installer ou ouvrir l'acces Kalanso
+- Installer ou ouvrir l'acces La cible du formateur
 - Former direction, secretariat, comptabilite et enseignants test
 - Faire une simulation complete : inscription, paiement, absence, tableau de bord
 
@@ -191,10 +191,10 @@ Livrable : rapport de bilan pilote et proposition commerciale.
 
 Le pilote est reussi si :
 
-- Au moins 80 % des eleves du campus pilote sont enregistres dans Kalanso
-- Au moins 80 % des paiements du mois sont saisis dans Kalanso
+- Au moins 80 % des eleves du campus pilote sont enregistres dans La cible du formateur
+- Au moins 80 % des paiements du mois sont saisis dans La cible du formateur
 - La direction consulte le tableau de bord au moins 2 fois par semaine
-- Le secretariat utilise Kalanso pour les fiches eleves et listes de classes
+- Le secretariat utilise La cible du formateur pour les fiches eleves et listes de classes
 - Au moins 2 enseignants utilisent le module absences ou notes pendant le test
 - Le temps de production d'une liste ou situation passe de manuel a moins de 10 minutes
 - Satisfaction direction superieure ou egale a 80 %
@@ -215,7 +215,7 @@ Parade : formation courte, procedures visuelles, support WhatsApp.
 Parade : privilegier les operations simples, interfaces legeres, exports Excel/PDF, et prevoir une strategie offline plus tard.
 
 ### Risque : confusion entre projet sur mesure et produit SaaS
-Parade : expliquer que Kalanso est un produit standard configurable, pas un developpement totalement specifique pour une seule ecole.
+Parade : expliquer que La cible du formateur est un produit standard configurable, pas un developpement totalement specifique pour une seule ecole.
 
 ## 10. Prochaine action immediate
 
@@ -226,7 +226,7 @@ Objectif du rendez-vous :
 - Valider le perimetre MVP
 - Identifier les utilisateurs cles
 - Obtenir les donnees minimales
-- Fixer une date de demonstration
+- Fixer une date de présentation
 
 ## 11. Decision recommandee
 

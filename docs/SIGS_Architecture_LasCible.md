@@ -1140,7 +1140,7 @@ module Paiement) lorsque l\'échelle le justifiera.
   Développement (dev) Développeurs      Docker Compose local PostgreSQL local
                       locaux                                 
 
-  Staging (pré-prod)  Tests QA & démos  VPS dédié (4 CPU,    PostgreSQL
+  Staging (pré-prod)  Tests QA  VPS dédié (4 CPU,    PostgreSQL
                       clients           8GB RAM)             staging
 
   Production          Utilisation       VPS dédié (8 CPU,    PostgreSQL +

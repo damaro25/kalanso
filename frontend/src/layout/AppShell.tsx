@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { AppShell as MantineAppShell, NavLink as MantineNavLink, Group, Text, Button, Burger, ScrollArea } from '@mantine/core';
+import { ActionIcon, AppShell as MantineAppShell, NavLink as MantineNavLink, Group, Text, Button, Burger, ScrollArea } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -120,44 +120,55 @@ export function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  function deconnecter() {
+    logout();
+    navigate('/login');
+  }
+
   const visibleGroups = GROUPS.map((group) => ({
     ...group,
     items: group.items.filter((item) => !item.roles || (user && item.roles.includes(user.role))),
   })).filter((group) => group.items.length > 0);
 
   return (
-    <MantineAppShell header={{ height: 60 }} navbar={{ width: 270, breakpoint: 'sm', collapsed: { mobile: !opened } }} padding="md">
+    // Menu replié (bouton burger) sous 992 px : une tablette en portrait garde toute la largeur pour le contenu.
+    <MantineAppShell
+      header={{ height: 60 }}
+      navbar={{ width: 270, breakpoint: 'md', collapsed: { mobile: !opened } }}
+      padding={{ base: 'xs', sm: 'md' }}
+    >
       <MantineAppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group>
-            <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-            <Text fw={700} size="lg" c="kalanso.7">
-              Kalanso
+        <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+          <Group wrap="nowrap">
+            <Burger opened={opened} onClick={toggle} hiddenFrom="md" size="sm" aria-label="Ouvrir le menu" />
+            <Text fw={700} fz={{ base: 'md', sm: 'lg' }} c="kalanso.7" truncate>
+              La cible du formateur
             </Text>
           </Group>
-          <Group>
+          <Group wrap="nowrap" gap="xs">
             {user && (
-              <Text size="sm">
+              <Text size="sm" visibleFrom="sm" truncate>
                 {user.prenom} {user.nom} — {ROLE_LABELS[user.role]}
               </Text>
             )}
-            <Button
-              size="xs"
-              variant="light"
-              leftSection={<IconLogout size={16} stroke={1.5} />}
-              onClick={() => {
-                logout();
-                navigate('/login');
-              }}
-            >
+            <Button size="xs" variant="light" visibleFrom="sm" leftSection={<IconLogout size={16} stroke={1.5} />} onClick={deconnecter}>
               Déconnexion
             </Button>
+            {/* Téléphone : l'icône seule suffit, le nom et le rôle sont rappelés en haut du menu */}
+            <ActionIcon variant="light" size="lg" hiddenFrom="sm" aria-label="Déconnexion" onClick={deconnecter}>
+              <IconLogout size={18} stroke={1.5} />
+            </ActionIcon>
           </Group>
         </Group>
       </MantineAppShell.Header>
 
       <MantineAppShell.Navbar p="md">
         <ScrollArea>
+          {user && (
+            <Text size="sm" c="dimmed" mb="sm" hiddenFrom="sm">
+              {user.prenom} {user.nom} — {ROLE_LABELS[user.role]}
+            </Text>
+          )}
           <MantineNavLink
             component={NavLink}
             to={DASHBOARD.to}

@@ -117,7 +117,7 @@ export class CommunicationService {
     const destinataires = await this.destinatairesEleve(eleveId);
     if (destinataires.length === 0) return;
 
-    const contenu = `Kalanso : votre enfant ${eleve.prenom} ${eleve.nom} a été marqué(e) absent(e) le ${date.toLocaleDateString('fr-FR')}. Merci de contacter l'école.`;
+    const contenu = `La cible du formateur : votre enfant ${eleve.prenom} ${eleve.nom} a été marqué(e) absent(e) le ${date.toLocaleDateString('fr-FR')}. Merci de contacter l'école.`;
     await this.envoyerA(ecoleId, eleveId, destinataires, contenu, 'ABSENCE');
   }
 
@@ -137,7 +137,7 @@ export class CommunicationService {
       throw new BadRequestException("Cet élève n'a aucun parent avec un numéro de téléphone");
     }
 
-    const contenu = `Kalanso : rappel de paiement pour ${facture.eleve.prenom} ${facture.eleve.nom} — ${facture.libelle} : reste à payer ${reste.toLocaleString('fr-FR')} GNF. Merci de régulariser auprès de l'école.`;
+    const contenu = `La cible du formateur : rappel de paiement pour ${facture.eleve.prenom} ${facture.eleve.nom} — ${facture.libelle} : reste à payer ${reste.toLocaleString('fr-FR')} GNF. Merci de régulariser auprès de l'école.`;
     return this.envoyerA(ecoleId, facture.eleveId, destinataires, contenu, 'RAPPEL_IMPAYE', envoyeParId);
   }
 }

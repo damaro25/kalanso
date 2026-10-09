@@ -157,7 +157,7 @@ export function LogistiquePage() {
       </Group>
 
       {resume && (
-        <SimpleGrid cols={3}>
+        <SimpleGrid cols={{ base: 1, sm: 3 }}>
           <Paper withBorder p="md">
             <Text size="sm" c="dimmed">Références</Text>
             <Text fw={700}>{resume.nombreReferences}</Text>
@@ -182,60 +182,62 @@ export function LogistiquePage() {
           value={filtreCategorie}
           onChange={setFiltreCategorie}
           clearable
-          w={200}
+          w={{ base: '100%', sm: 200 }}
         />
-        <Select placeholder="Tous états" data={ETATS} value={filtreEtat} onChange={setFiltreEtat} clearable w={180} />
+        <Select placeholder="Tous états" data={ETATS} value={filtreEtat} onChange={setFiltreEtat} clearable w={{ base: '100%', sm: 180 }} />
       </Group>
 
       {isLoading && <p>Chargement...</p>}
       {materiels && materiels.length === 0 && <Text c="dimmed">Aucun matériel enregistré.</Text>}
 
       {materiels && materiels.length > 0 && (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Catégorie</Table.Th>
-              <Table.Th>Désignation</Table.Th>
-              <Table.Th>Quantité</Table.Th>
-              <Table.Th>État</Table.Th>
-              <Table.Th>Salle</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {materiels.map((m) => (
-              <Table.Tr key={m.id}>
-                <Table.Td>{CATEGORIE_LABELS[m.categorie]}</Table.Td>
-                <Table.Td>{m.designation}</Table.Td>
-                <Table.Td>{m.quantite}</Table.Td>
-                <Table.Td>
-                  <Badge color={ETAT_COLORS[m.etat]}>{ETAT_LABELS[m.etat]}</Badge>
-                </Table.Td>
-                <Table.Td>{m.salle?.nom ?? '—'}</Table.Td>
-                <Table.Td>
-                  <Group gap="xs">
-                    <Anchor component="button" type="button" onClick={() => ouvrirEdition(m)}>
-                      Modifier
-                    </Anchor>
-                    <Anchor
-                      component="button"
-                      type="button"
-                      c="red"
-                      onClick={() =>
-                        confirmerSuppression({
-                          message: `Voulez-vous vraiment supprimer « ${m.designation} » ? Cette action est définitive.`,
-                          onConfirm: () => deleteMutation.mutate(m.id),
-                        })
-                      }
-                    >
-                      Supprimer
-                    </Anchor>
-                  </Group>
-                </Table.Td>
+        <Table.ScrollContainer minWidth={620}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Catégorie</Table.Th>
+                <Table.Th>Désignation</Table.Th>
+                <Table.Th>Quantité</Table.Th>
+                <Table.Th>État</Table.Th>
+                <Table.Th>Salle</Table.Th>
+                <Table.Th />
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {materiels.map((m) => (
+                <Table.Tr key={m.id}>
+                  <Table.Td>{CATEGORIE_LABELS[m.categorie]}</Table.Td>
+                  <Table.Td>{m.designation}</Table.Td>
+                  <Table.Td>{m.quantite}</Table.Td>
+                  <Table.Td>
+                    <Badge color={ETAT_COLORS[m.etat]}>{ETAT_LABELS[m.etat]}</Badge>
+                  </Table.Td>
+                  <Table.Td>{m.salle?.nom ?? '—'}</Table.Td>
+                  <Table.Td>
+                    <Group gap="xs">
+                      <Anchor component="button" type="button" onClick={() => ouvrirEdition(m)}>
+                        Modifier
+                      </Anchor>
+                      <Anchor
+                        component="button"
+                        type="button"
+                        c="red"
+                        onClick={() =>
+                          confirmerSuppression({
+                            message: `Voulez-vous vraiment supprimer « ${m.designation} » ? Cette action est définitive.`,
+                            onConfirm: () => deleteMutation.mutate(m.id),
+                          })
+                        }
+                      >
+                        Supprimer
+                      </Anchor>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
 
       <Modal

@@ -4,7 +4,7 @@ import { Title, Select, Table, Button, Group, Paper, TextInput, NumberInput, Sta
 import { notifications } from '@mantine/notifications';
 import { IconDownload, IconEye } from '@tabler/icons-react';
 import { confirmerSuppression } from '../../lib/confirm';
-import { fetchClasses } from '../../api/classes';
+import { fetchClassesCourantes } from '../../api/classes';
 import { fetchMatieres } from '../../api/notes';
 import { fetchPersonnel } from '../../api/personnel';
 import {
@@ -25,7 +25,7 @@ export function EmploiDuTempsPage() {
   const { user } = useAuth();
   const peutModifier = user?.role === 'FONDATEUR' || user?.role === 'CHEF_ETABLISSEMENT';
 
-  const { data: classes } = useQuery({ queryKey: ['classes'], queryFn: fetchClasses });
+  const { data: classes } = useQuery({ queryKey: ['classes', 'courante'], queryFn: fetchClassesCourantes });
   const [classeId, setClasseId] = useState<string | null>(null);
 
   const [jour, setJour] = useState<string | null>('LUNDI');
@@ -117,7 +117,7 @@ export function EmploiDuTempsPage() {
           data={(classes ?? []).map((c) => ({ value: c.id, label: `${c.nom} (${c.niveau.nom})` }))}
           value={classeId}
           onChange={setClasseId}
-          w={280}
+          w={{ base: '100%', sm: 280 }}
         />
         {classeId && (
           <>
@@ -141,15 +141,15 @@ export function EmploiDuTempsPage() {
             Nouveau créneau
           </Title>
           <Group>
-            <Select data={JOURS} value={jour} onChange={setJour} w={140} />
-            <TextInput placeholder="Début (ex: 08:00)" value={heureDebut} onChange={(e) => setHeureDebut(e.currentTarget.value)} w={140} />
-            <TextInput placeholder="Fin (ex: 09:30)" value={heureFin} onChange={(e) => setHeureFin(e.currentTarget.value)} w={140} />
+            <Select data={JOURS} value={jour} onChange={setJour} w={{ base: '100%', sm: 140 }} />
+            <TextInput placeholder="Début (ex: 08:00)" value={heureDebut} onChange={(e) => setHeureDebut(e.currentTarget.value)} w={{ base: '100%', sm: 140 }} />
+            <TextInput placeholder="Fin (ex: 09:30)" value={heureFin} onChange={(e) => setHeureFin(e.currentTarget.value)} w={{ base: '100%', sm: 140 }} />
             <Select
               placeholder="Matière"
               data={(matieres ?? []).map((m) => ({ value: m.id, label: m.nom }))}
               value={matiereId}
               onChange={setMatiereId}
-              w={180}
+              w={{ base: '100%', sm: 180 }}
             />
             <Select
               placeholder="Enseignant (optionnel)"
@@ -157,7 +157,7 @@ export function EmploiDuTempsPage() {
               value={personnelId}
               onChange={setPersonnelId}
               clearable
-              w={200}
+              w={{ base: '100%', sm: 200 }}
             />
             <Select
               placeholder="Salle (optionnel)"
@@ -165,7 +165,7 @@ export function EmploiDuTempsPage() {
               value={salleId}
               onChange={setSalleId}
               clearable
-              w={160}
+              w={{ base: '100%', sm: 160 }}
             />
             {personnelId && (
               <NumberInput
@@ -173,7 +173,7 @@ export function EmploiDuTempsPage() {
                 min={0}
                 value={tauxHoraire}
                 onChange={(v) => setTauxHoraire(v === '' ? '' : Number(v))}
-                w={160}
+                w={{ base: '100%', sm: 160 }}
               />
             )}
             <Button
@@ -189,7 +189,7 @@ export function EmploiDuTempsPage() {
               placeholder="Nouvelle salle (ex: Salle B2)"
               value={nouvelleSalle}
               onChange={(e) => setNouvelleSalle(e.currentTarget.value)}
-              w={220}
+              w={{ base: '100%', sm: 220 }}
             />
             <Button variant="light" disabled={!nouvelleSalle} loading={salleMutation.isPending} onClick={() => salleMutation.mutate()}>
               Créer la salle
@@ -212,51 +212,53 @@ export function EmploiDuTempsPage() {
               <Title order={4} mb="sm">
                 {label}
               </Title>
-              <Table striped>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Horaire</Table.Th>
-                    <Table.Th>Matière</Table.Th>
-                    <Table.Th>Enseignant</Table.Th>
-                    <Table.Th>Taux horaire</Table.Th>
-                    <Table.Th>Salle</Table.Th>
-                    {peutModifier && <Table.Th />}
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {creneauxDuJour.map((c) => (
-                    <Table.Tr key={c.id}>
-                      <Table.Td>
-                        {c.heureDebut} – {c.heureFin}
-                      </Table.Td>
-                      <Table.Td>
-                        <Badge variant="light">{c.matiere.nom}</Badge>
-                      </Table.Td>
-                      <Table.Td>{c.personnel ? `${c.personnel.prenom} ${c.personnel.nom}` : '—'}</Table.Td>
-                      <Table.Td>{c.tauxHoraire ? `${Number(c.tauxHoraire).toLocaleString('fr-FR')} GNF` : '—'}</Table.Td>
-                      <Table.Td>{c.salle ? c.salle.nom : '—'}</Table.Td>
-                      {peutModifier && (
-                        <Table.Td>
-                          <Button
-                            size="xs"
-                            color="red"
-                            variant="subtle"
-                            loading={deleteMutation.isPending}
-                            onClick={() =>
-                              confirmerSuppression({
-                                message: `Voulez-vous vraiment supprimer le créneau de ${c.matiere.nom} (${c.heureDebut} – ${c.heureFin}) ? Cette action est définitive.`,
-                                onConfirm: () => deleteMutation.mutate(c.id),
-                              })
-                            }
-                          >
-                            Supprimer
-                          </Button>
-                        </Table.Td>
-                      )}
+              <Table.ScrollContainer minWidth={620}>
+                <Table striped>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Horaire</Table.Th>
+                      <Table.Th>Matière</Table.Th>
+                      <Table.Th>Enseignant</Table.Th>
+                      <Table.Th>Taux horaire</Table.Th>
+                      <Table.Th>Salle</Table.Th>
+                      {peutModifier && <Table.Th />}
                     </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {creneauxDuJour.map((c) => (
+                      <Table.Tr key={c.id}>
+                        <Table.Td>
+                          {c.heureDebut} – {c.heureFin}
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge variant="light">{c.matiere.nom}</Badge>
+                        </Table.Td>
+                        <Table.Td>{c.personnel ? `${c.personnel.prenom} ${c.personnel.nom}` : '—'}</Table.Td>
+                        <Table.Td>{c.tauxHoraire ? `${Number(c.tauxHoraire).toLocaleString('fr-FR')} GNF` : '—'}</Table.Td>
+                        <Table.Td>{c.salle ? c.salle.nom : '—'}</Table.Td>
+                        {peutModifier && (
+                          <Table.Td>
+                            <Button
+                              size="xs"
+                              color="red"
+                              variant="subtle"
+                              loading={deleteMutation.isPending}
+                              onClick={() =>
+                                confirmerSuppression({
+                                  message: `Voulez-vous vraiment supprimer le créneau de ${c.matiere.nom} (${c.heureDebut} – ${c.heureFin}) ? Cette action est définitive.`,
+                                  onConfirm: () => deleteMutation.mutate(c.id),
+                                })
+                              }
+                            >
+                              Supprimer
+                            </Button>
+                          </Table.Td>
+                        )}
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
             </Paper>
           );
         })}

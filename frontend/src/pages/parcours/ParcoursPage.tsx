@@ -100,7 +100,7 @@ export function ParcoursPage() {
         data={(classes ?? []).map((c) => ({ value: c.id, label: `${c.nom} (${c.niveau.nom} · ${c.anneeScolaire.libelle})` }))}
         value={classeId}
         onChange={setClasseId}
-        w={320}
+        w={{ base: '100%', sm: 320 }}
       />
 
       {chargementParcours && <Text>Chargement...</Text>}
@@ -122,50 +122,52 @@ export function ParcoursPage() {
 
       {parcoursData && parcoursData.parcours.length > 0 && (
         <Stack>
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Élève</Table.Th>
-                <Table.Th>T1</Table.Th>
-                <Table.Th>T2</Table.Th>
-                <Table.Th>T3</Table.Th>
-                <Table.Th>Moyenne annuelle</Table.Th>
-                <Table.Th>Décision</Table.Th>
-                <Table.Th>Classe destination</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {parcoursData.parcours.map((ligne) => (
-                <Table.Tr key={ligne.eleve.id}>
-                  <Table.Td>
-                    {ligne.eleve.prenom} {ligne.eleve.nom}
-                  </Table.Td>
-                  <Table.Td>{formatMoyenne(ligne.moyenneTrimestre1)}</Table.Td>
-                  <Table.Td>{formatMoyenne(ligne.moyenneTrimestre2)}</Table.Td>
-                  <Table.Td>{formatMoyenne(ligne.moyenneTrimestre3)}</Table.Td>
-                  <Table.Td>
-                    <strong>{formatMoyenne(ligne.moyenneAnnuelle)}</strong>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge color={DECISION_COLORS[ligne.decision]}>{DECISION_LABELS[ligne.decision]}</Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Select
-                      placeholder="Aucune (ignorer)"
-                      data={(destinationsData?.classesDisponibles ?? []).map((c) => ({
-                        value: c.id,
-                        label: `${c.nom} (${c.niveau.nom} · ${c.anneeScolaire.libelle})`,
-                      }))}
-                      value={destinations[ligne.eleve.id] ?? null}
-                      onChange={(v) => setDestinations((prev) => ({ ...prev, [ligne.eleve.id]: v }))}
-                      clearable
-                      w={260}
-                    />
-                  </Table.Td>
+          <Table.ScrollContainer minWidth={620}>
+            <Table striped highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Élève</Table.Th>
+                  <Table.Th>T1</Table.Th>
+                  <Table.Th>T2</Table.Th>
+                  <Table.Th>T3</Table.Th>
+                  <Table.Th>Moyenne annuelle</Table.Th>
+                  <Table.Th>Décision</Table.Th>
+                  <Table.Th>Classe destination</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {parcoursData.parcours.map((ligne) => (
+                  <Table.Tr key={ligne.eleve.id}>
+                    <Table.Td>
+                      {ligne.eleve.prenom} {ligne.eleve.nom}
+                    </Table.Td>
+                    <Table.Td>{formatMoyenne(ligne.moyenneTrimestre1)}</Table.Td>
+                    <Table.Td>{formatMoyenne(ligne.moyenneTrimestre2)}</Table.Td>
+                    <Table.Td>{formatMoyenne(ligne.moyenneTrimestre3)}</Table.Td>
+                    <Table.Td>
+                      <strong>{formatMoyenne(ligne.moyenneAnnuelle)}</strong>
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge color={DECISION_COLORS[ligne.decision]}>{DECISION_LABELS[ligne.decision]}</Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Select
+                        placeholder="Aucune (ignorer)"
+                        data={(destinationsData?.classesDisponibles ?? []).map((c) => ({
+                          value: c.id,
+                          label: `${c.nom} (${c.niveau.nom} · ${c.anneeScolaire.libelle})`,
+                        }))}
+                        value={destinations[ligne.eleve.id] ?? null}
+                        onChange={(v) => setDestinations((prev) => ({ ...prev, [ligne.eleve.id]: v }))}
+                        clearable
+                        w={260}
+                      />
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
 
           <Group>
             <Button

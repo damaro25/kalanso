@@ -146,7 +146,7 @@ export function ClassesListPage() {
                 data={(annees ?? []).map((a) => ({ value: a.id, label: a.libelle + (a.courante ? ' (courante)' : '') }))}
                 value={anneeClasseId}
                 onChange={setAnneeSelectionnee}
-                w={220}
+                w={{ base: '100%', sm: 220 }}
               />
               <Button
                 disabled={!nom || !niveauId || !anneeClasseId}
@@ -240,57 +240,59 @@ export function ClassesListPage() {
       )}
 
       {effectifs && effectifsFiltres.length > 0 && (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Classe</Table.Th>
-              <Table.Th>Niveau</Table.Th>
-              <Table.Th>Année scolaire</Table.Th>
-              <Table.Th>Frais d'inscription</Table.Th>
-              <Table.Th>Écolage</Table.Th>
-              <Table.Th>Filles</Table.Th>
-              <Table.Th>Garçons</Table.Th>
-              <Table.Th>Total</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {effectifsFiltres.map((e) => (
-              <Table.Tr key={e.classeId}>
-                <Table.Td>{e.nom}</Table.Td>
-                <Table.Td>{e.niveau}</Table.Td>
-                <Table.Td>{e.anneeScolaire}</Table.Td>
-                <Table.Td>{Number(e.fraisInscription).toLocaleString('fr-FR')} GNF</Table.Td>
-                <Table.Td>{Number(e.ecolage).toLocaleString('fr-FR')} GNF</Table.Td>
-                <Table.Td>{e.filles}</Table.Td>
-                <Table.Td>{e.garcons}</Table.Td>
-                <Table.Td>{e.total}</Table.Td>
-                <Table.Td>
-                  <Group gap="md" wrap="nowrap">
-                    <Anchor component={Link} to={`/classes/${e.classeId}`}>
-                      Voir les élèves
-                    </Anchor>
-                    <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEdition(e)}>
-                      Modifier
-                    </Anchor>
-                    <Tooltip label="Impossible : des élèves sont inscrits dans cette classe" disabled={e.total === 0}>
-                      <Anchor
-                        component="button"
-                        type="button"
-                        size="sm"
-                        c={e.total === 0 ? 'red' : 'dimmed'}
-                        onClick={() => e.total === 0 && demanderSuppression(e)}
-                        style={e.total > 0 ? { cursor: 'not-allowed' } : undefined}
-                      >
-                        Supprimer
-                      </Anchor>
-                    </Tooltip>
-                  </Group>
-                </Table.Td>
+        <Table.ScrollContainer minWidth={620}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Classe</Table.Th>
+                <Table.Th>Niveau</Table.Th>
+                <Table.Th>Année scolaire</Table.Th>
+                <Table.Th>Frais d'inscription</Table.Th>
+                <Table.Th>Écolage</Table.Th>
+                <Table.Th>Filles</Table.Th>
+                <Table.Th>Garçons</Table.Th>
+                <Table.Th>Total</Table.Th>
+                <Table.Th />
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {effectifsFiltres.map((e) => (
+                <Table.Tr key={e.classeId}>
+                  <Table.Td>{e.nom}</Table.Td>
+                  <Table.Td>{e.niveau}</Table.Td>
+                  <Table.Td>{e.anneeScolaire}</Table.Td>
+                  <Table.Td>{Number(e.fraisInscription).toLocaleString('fr-FR')} GNF</Table.Td>
+                  <Table.Td>{Number(e.ecolage).toLocaleString('fr-FR')} GNF</Table.Td>
+                  <Table.Td>{e.filles}</Table.Td>
+                  <Table.Td>{e.garcons}</Table.Td>
+                  <Table.Td>{e.total}</Table.Td>
+                  <Table.Td>
+                    <Group gap="md" wrap="nowrap">
+                      <Anchor component={Link} to={`/classes/${e.classeId}`}>
+                        Voir les élèves
+                      </Anchor>
+                      <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEdition(e)}>
+                        Modifier
+                      </Anchor>
+                      <Tooltip label="Impossible : des élèves sont inscrits dans cette classe" disabled={e.total === 0}>
+                        <Anchor
+                          component="button"
+                          type="button"
+                          size="sm"
+                          c={e.total === 0 ? 'red' : 'dimmed'}
+                          onClick={() => e.total === 0 && demanderSuppression(e)}
+                          style={e.total > 0 ? { cursor: 'not-allowed' } : undefined}
+                        >
+                          Supprimer
+                        </Anchor>
+                      </Tooltip>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
 
       <Modal opened={!!classeEnEdition} onClose={() => setClasseEnEdition(null)} title="Modifier la classe">

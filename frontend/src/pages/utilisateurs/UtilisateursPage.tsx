@@ -100,7 +100,7 @@ export function UtilisateursPage() {
       <Title order={2}>Utilisateurs</Title>
       <Text size="sm" c="dimmed">
         Gérez les comptes du personnel administratif (fondateur, chef d'établissement, secrétaire, comptable,
-        enseignant) qui accèdent à Kalanso.
+        enseignant) qui accèdent à La cible du formateur.
       </Text>
 
       <Paper withBorder p="md">
@@ -126,55 +126,57 @@ export function UtilisateursPage() {
       {isLoading && <p>Chargement...</p>}
 
       {utilisateurs && (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Nom</Table.Th>
-              <Table.Th>Email</Table.Th>
-              <Table.Th>Rôle</Table.Th>
-              <Table.Th>Statut</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {utilisateurs.map((u) => (
-              <Table.Tr key={u.id}>
-                <Table.Td>
-                  {u.prenom} {u.nom}
-                </Table.Td>
-                <Table.Td>{u.email}</Table.Td>
-                <Table.Td>{ROLE_LABELS[u.role]}</Table.Td>
-                <Table.Td>
-                  <Badge color={u.actif ? 'green' : 'gray'} variant="light">
-                    {u.actif ? 'Actif' : 'Désactivé'}
-                  </Badge>
-                </Table.Td>
-                <Table.Td>
-                  <Group gap="md">
-                    <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEdition(u)}>
-                      Modifier
-                    </Anchor>
-                    {u.actif ? (
-                      <Anchor component="button" type="button" size="sm" c="red" onClick={() => confirmerDesactivation(u)}>
-                        Désactiver
-                      </Anchor>
-                    ) : (
-                      <Anchor
-                        component="button"
-                        type="button"
-                        size="sm"
-                        c="kalanso"
-                        onClick={() => statutMutation.mutate({ id: u.id, actif: true })}
-                      >
-                        Réactiver
-                      </Anchor>
-                    )}
-                  </Group>
-                </Table.Td>
+        <Table.ScrollContainer minWidth={620}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Nom</Table.Th>
+                <Table.Th>Email</Table.Th>
+                <Table.Th>Rôle</Table.Th>
+                <Table.Th>Statut</Table.Th>
+                <Table.Th />
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {utilisateurs.map((u) => (
+                <Table.Tr key={u.id}>
+                  <Table.Td>
+                    {u.prenom} {u.nom}
+                  </Table.Td>
+                  <Table.Td>{u.email}</Table.Td>
+                  <Table.Td>{ROLE_LABELS[u.role]}</Table.Td>
+                  <Table.Td>
+                    <Badge color={u.actif ? 'green' : 'gray'} variant="light">
+                      {u.actif ? 'Actif' : 'Désactivé'}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap="md">
+                      <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEdition(u)}>
+                        Modifier
+                      </Anchor>
+                      {u.actif ? (
+                        <Anchor component="button" type="button" size="sm" c="red" onClick={() => confirmerDesactivation(u)}>
+                          Désactiver
+                        </Anchor>
+                      ) : (
+                        <Anchor
+                          component="button"
+                          type="button"
+                          size="sm"
+                          c="kalanso"
+                          onClick={() => statutMutation.mutate({ id: u.id, actif: true })}
+                        >
+                          Réactiver
+                        </Anchor>
+                      )}
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
 
       <Modal opened={!!utilisateurEnEdition} onClose={() => setUtilisateurEnEdition(null)} title="Modifier le compte">

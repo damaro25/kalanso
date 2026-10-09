@@ -99,7 +99,7 @@ export function MatieresPage() {
             min={0}
             value={coefficient}
             onChange={(v) => setCoefficient(v === '' ? '' : Number(v))}
-            w={140}
+            w={{ base: '100%', sm: 140 }}
           />
           <Button
             disabled={!niveauId || !nom || !coefficient}
@@ -118,7 +118,7 @@ export function MatieresPage() {
         value={filtreNiveauId}
         onChange={setFiltreNiveauId}
         clearable
-        w={260}
+        w={{ base: '100%', sm: 260 }}
       />
 
       {isLoading && <p>Chargement...</p>}
@@ -126,46 +126,48 @@ export function MatieresPage() {
       {matieres && matieres.length === 0 && <Text c="dimmed">Aucune matière définie.</Text>}
 
       {matieres && matieres.length > 0 && (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Niveau</Table.Th>
-              <Table.Th>Matière</Table.Th>
-              <Table.Th>Coefficient</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {matieres.map((m) => (
-              <Table.Tr key={m.id}>
-                <Table.Td>{m.niveau.nom}</Table.Td>
-                <Table.Td>{m.nom}</Table.Td>
-                <Table.Td>{Number(m.coefficient)}</Table.Td>
-                <Table.Td>
-                  <Group gap="md">
-                    <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEdition(m)}>
-                      Modifier
-                    </Anchor>
-                    <Anchor
-                      component="button"
-                      type="button"
-                      size="sm"
-                      c="red"
-                      onClick={() =>
-                        confirmerSuppression({
-                          message: `Voulez-vous vraiment supprimer « ${m.nom} » (${m.niveau.nom}) ? Cette action est définitive.`,
-                          onConfirm: () => suppressionMutation.mutate(m.id),
-                        })
-                      }
-                    >
-                      Supprimer
-                    </Anchor>
-                  </Group>
-                </Table.Td>
+        <Table.ScrollContainer minWidth={620}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Niveau</Table.Th>
+                <Table.Th>Matière</Table.Th>
+                <Table.Th>Coefficient</Table.Th>
+                <Table.Th />
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {matieres.map((m) => (
+                <Table.Tr key={m.id}>
+                  <Table.Td>{m.niveau.nom}</Table.Td>
+                  <Table.Td>{m.nom}</Table.Td>
+                  <Table.Td>{Number(m.coefficient)}</Table.Td>
+                  <Table.Td>
+                    <Group gap="md">
+                      <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEdition(m)}>
+                        Modifier
+                      </Anchor>
+                      <Anchor
+                        component="button"
+                        type="button"
+                        size="sm"
+                        c="red"
+                        onClick={() =>
+                          confirmerSuppression({
+                            message: `Voulez-vous vraiment supprimer « ${m.nom} » (${m.niveau.nom}) ? Cette action est définitive.`,
+                            onConfirm: () => suppressionMutation.mutate(m.id),
+                          })
+                        }
+                      >
+                        Supprimer
+                      </Anchor>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
 
       <Modal opened={!!matiereEnEdition} onClose={() => setMatiereEnEdition(null)} title="Modifier la matière">

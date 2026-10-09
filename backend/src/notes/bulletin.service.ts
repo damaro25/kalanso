@@ -8,7 +8,7 @@ export function calculerMoyenne(notes: { valeur: number; coefficient: number }[]
   return totalPoints / totalCoefficient;
 }
 
-// Barème sur 10 (plafond des notes Kalanso) : mêmes seuils que l'ancien /20, divisés par 2.
+// Barème sur 10 (plafond des notes) : mêmes seuils que l'ancien /20, divisés par 2.
 export function mention(moyenne: number): string {
   if (moyenne >= 8) return 'Très Bien';
   if (moyenne >= 7) return 'Bien';

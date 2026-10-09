@@ -109,35 +109,37 @@ export function NiveauxPage() {
       {isLoading && <p>Chargement...</p>}
 
       {niveaux && (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Ordre</Table.Th>
-              <Table.Th>Nom</Table.Th>
-              <Table.Th>Cycle</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {niveaux.map((n) => (
-              <Table.Tr key={n.id}>
-                <Table.Td>{n.ordre}</Table.Td>
-                <Table.Td>{n.nom}</Table.Td>
-                <Table.Td>{n.cycle ?? '—'}</Table.Td>
-                <Table.Td>
-                  <Group gap="md">
-                    <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEdition(n)}>
-                      Modifier
-                    </Anchor>
-                    <Anchor component="button" type="button" size="sm" c="red" onClick={() => confirmerSuppression(n)}>
-                      Supprimer
-                    </Anchor>
-                  </Group>
-                </Table.Td>
+        <Table.ScrollContainer minWidth={620}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Ordre</Table.Th>
+                <Table.Th>Nom</Table.Th>
+                <Table.Th>Cycle</Table.Th>
+                <Table.Th />
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {niveaux.map((n) => (
+                <Table.Tr key={n.id}>
+                  <Table.Td>{n.ordre}</Table.Td>
+                  <Table.Td>{n.nom}</Table.Td>
+                  <Table.Td>{n.cycle ?? '—'}</Table.Td>
+                  <Table.Td>
+                    <Group gap="md">
+                      <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEdition(n)}>
+                        Modifier
+                      </Anchor>
+                      <Anchor component="button" type="button" size="sm" c="red" onClick={() => confirmerSuppression(n)}>
+                        Supprimer
+                      </Anchor>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
 
       <Modal opened={!!niveauEnEdition} onClose={() => setNiveauEnEdition(null)} title="Modifier le niveau">

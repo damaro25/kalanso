@@ -35,7 +35,7 @@ import {
   type StatutDocument,
   type TypeDocument,
 } from '../../api/admissions';
-import { fetchClasses, fetchAnneesScolaires } from '../../api/classes';
+import { fetchClassesCourantes, fetchAnneesScolaires } from '../../api/classes';
 import { confirmerSuppression } from '../../lib/confirm';
 
 const INSCRIPTION_DIRECTE_VIDE: InscriptionDirecteInput = {
@@ -99,12 +99,11 @@ export function AdmissionsPage() {
     queryFn: fetchHistoriqueAnnulations,
     enabled: filtre === 'HISTORIQUE',
   });
-  const { data: classes } = useQuery({ queryKey: ['classes'], queryFn: fetchClasses });
+  // Une admission ne peut affecter l'élève qu'à une classe de l'année scolaire en cours :
+  // proposer des classes d'années passées n'aurait pas de sens.
+  const { data: classesAnneeCourante = [] } = useQuery({ queryKey: ['classes', 'courante'], queryFn: fetchClassesCourantes });
   const { data: annees } = useQuery({ queryKey: ['annees-scolaires'], queryFn: fetchAnneesScolaires });
-  // Une admission ne peut affecter l'élève qu'à une classe de l'année scolaire
-  // courante : proposer des classes d'années passées n'aurait pas de sens.
   const anneeCourante = annees?.find((a) => a.courante) ?? annees?.[0];
-  const classesAnneeCourante = (classes ?? []).filter((c) => c.anneeScolaire.id === anneeCourante?.id);
 
   const [demandeAccept, setDemandeAccept] = useState<DemandeInscription | null>(null);
   const [classeId, setClasseId] = useState<string | null>(null);
@@ -298,32 +297,34 @@ export function AdmissionsPage() {
             <Text c="dimmed">Aucune annulation enregistrée.</Text>
           )}
           {historique && historique.length > 0 && (
-            <Table striped highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Date</Table.Th>
-                  <Table.Th>Élève</Table.Th>
-                  <Table.Th>Type</Table.Th>
-                  <Table.Th>Détail</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {historique.map((h) => (
-                  <Table.Tr key={h.id}>
-                    <Table.Td>{new Date(h.createdAt).toLocaleString('fr-FR')}</Table.Td>
-                    <Table.Td>
-                      {h.prenomEleve} {h.nomEleve}
-                    </Table.Td>
-                    <Table.Td>
-                      <Badge color={h.type === 'ADMISSION' ? 'red' : 'gray'}>
-                        {h.type === 'ADMISSION' ? 'Admission annulée' : 'Refus annulé'}
-                      </Badge>
-                    </Table.Td>
-                    <Table.Td>{h.detail ?? '—'}</Table.Td>
+            <Table.ScrollContainer minWidth={620}>
+              <Table striped highlightOnHover>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Date</Table.Th>
+                    <Table.Th>Élève</Table.Th>
+                    <Table.Th>Type</Table.Th>
+                    <Table.Th>Détail</Table.Th>
                   </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
+                </Table.Thead>
+                <Table.Tbody>
+                  {historique.map((h) => (
+                    <Table.Tr key={h.id}>
+                      <Table.Td>{new Date(h.createdAt).toLocaleString('fr-FR')}</Table.Td>
+                      <Table.Td>
+                        {h.prenomEleve} {h.nomEleve}
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge color={h.type === 'ADMISSION' ? 'red' : 'gray'}>
+                          {h.type === 'ADMISSION' ? 'Admission annulée' : 'Refus annulé'}
+                        </Badge>
+                      </Table.Td>
+                      <Table.Td>{h.detail ?? '—'}</Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
           )}
         </>
       ) : (
@@ -333,80 +334,82 @@ export function AdmissionsPage() {
       {demandes && demandes.length === 0 && <Text c="dimmed">Aucune demande dans cette catégorie.</Text>}
 
       {demandes && demandes.length > 0 && (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Élève</Table.Th>
-              <Table.Th>Niveau souhaité</Table.Th>
-              <Table.Th>Parent</Table.Th>
-              <Table.Th>Téléphone</Table.Th>
-              <Table.Th>Statut</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {demandes.map((d) => (
-              <Table.Tr key={d.id}>
-                <Table.Td>
-                  {d.prenomEleve} {d.nomEleve} ({d.genre})
-                </Table.Td>
-                <Table.Td>{d.niveau?.nom ?? d.niveauSouhaite ?? '—'}</Table.Td>
-                <Table.Td>
-                  {d.prenomParent} {d.nomParent}
-                </Table.Td>
-                <Table.Td>{d.telephoneParent}</Table.Td>
-                <Table.Td>
-                  <Badge color={STATUT_COLORS[d.statut]}>{STATUT_LABELS[d.statut]}</Badge>
-                </Table.Td>
-                <Table.Td>
-                  <Group gap="xs">
-                    <Button size="xs" variant="light" onClick={() => setDemandeDocs(d)}>
-                      Documents ({d.documents.length})
-                    </Button>
-                    {d.statut === 'EN_ATTENTE' && (
-                      <>
-                        <Button size="xs" color="green" onClick={() => setDemandeAccept(d)}>
-                          Accepter
-                        </Button>
-                        <Button size="xs" variant="light" color="red" onClick={() => setDemandeRefus(d)}>
-                          Refuser
-                        </Button>
-                      </>
-                    )}
-                    {d.statut === 'ACCEPTEE' && (
-                      <Button
-                        size="xs"
-                        variant="light"
-                        color="red"
-                        loading={annulerMutation.isPending}
-                        onClick={() => confirmerAnnulation(d)}
-                      >
-                        Annuler l'admission
+        <Table.ScrollContainer minWidth={620}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Élève</Table.Th>
+                <Table.Th>Niveau souhaité</Table.Th>
+                <Table.Th>Parent</Table.Th>
+                <Table.Th>Téléphone</Table.Th>
+                <Table.Th>Statut</Table.Th>
+                <Table.Th />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {demandes.map((d) => (
+                <Table.Tr key={d.id}>
+                  <Table.Td>
+                    {d.prenomEleve} {d.nomEleve} ({d.genre})
+                  </Table.Td>
+                  <Table.Td>{d.niveau?.nom ?? d.niveauSouhaite ?? '—'}</Table.Td>
+                  <Table.Td>
+                    {d.prenomParent} {d.nomParent}
+                  </Table.Td>
+                  <Table.Td>{d.telephoneParent}</Table.Td>
+                  <Table.Td>
+                    <Badge color={STATUT_COLORS[d.statut]}>{STATUT_LABELS[d.statut]}</Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap="xs">
+                      <Button size="xs" variant="light" onClick={() => setDemandeDocs(d)}>
+                        Documents ({d.documents.length})
                       </Button>
-                    )}
-                    {d.statut === 'REFUSEE' && (
-                      <>
-                        {d.motifRefus && (
-                          <Text size="sm" c="dimmed">
-                            Motif : {d.motifRefus}
-                          </Text>
-                        )}
+                      {d.statut === 'EN_ATTENTE' && (
+                        <>
+                          <Button size="xs" color="green" onClick={() => setDemandeAccept(d)}>
+                            Accepter
+                          </Button>
+                          <Button size="xs" variant="light" color="red" onClick={() => setDemandeRefus(d)}>
+                            Refuser
+                          </Button>
+                        </>
+                      )}
+                      {d.statut === 'ACCEPTEE' && (
                         <Button
                           size="xs"
                           variant="light"
-                          loading={annulerRefusMutation.isPending}
-                          onClick={() => annulerRefusMutation.mutate(d.id)}
+                          color="red"
+                          loading={annulerMutation.isPending}
+                          onClick={() => confirmerAnnulation(d)}
                         >
-                          Remettre en attente
+                          Annuler l'admission
                         </Button>
-                      </>
-                    )}
-                  </Group>
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+                      )}
+                      {d.statut === 'REFUSEE' && (
+                        <>
+                          {d.motifRefus && (
+                            <Text size="sm" c="dimmed">
+                              Motif : {d.motifRefus}
+                            </Text>
+                          )}
+                          <Button
+                            size="xs"
+                            variant="light"
+                            loading={annulerRefusMutation.isPending}
+                            onClick={() => annulerRefusMutation.mutate(d.id)}
+                          >
+                            Remettre en attente
+                          </Button>
+                        </>
+                      )}
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
         </>
       )}
@@ -600,14 +603,14 @@ export function AdmissionsPage() {
           )}
 
           <Group align="flex-end">
-            <Select label="Type" data={TYPES_DOCUMENT} value={typeDocInscription} onChange={setTypeDocInscription} w={180} />
+            <Select label="Type" data={TYPES_DOCUMENT} value={typeDocInscription} onChange={setTypeDocInscription} w={{ base: '100%', sm: 180 }} />
             <FileInput
               label="Fichier"
               placeholder="Choisir un fichier"
               accept={ACCEPT_FICHIERS}
               value={fichierDocInscription}
               onChange={setFichierDocInscription}
-              w={220}
+              w={{ base: '100%', sm: 220 }}
             />
             <Button variant="light" disabled={!typeDocInscription || !fichierDocInscription} onClick={ajouterPieceInscription}>
               Ajouter le document

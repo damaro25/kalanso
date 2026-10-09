@@ -16,7 +16,7 @@ import {
 } from '../../api/finances';
 import { envoyerRappelImpaye } from '../../api/communication';
 import { initierTransaction, confirmerTransaction, echecTransaction, OPERATEURS, type OperateurMobileMoney } from '../../api/mobileMoney';
-import { fetchClasses, fetchClasseEleves } from '../../api/classes';
+import { fetchClassesCourantes, fetchClasseEleves } from '../../api/classes';
 import { correspond } from '../../lib/search';
 import { usePendingIds } from '../../offline/outbox';
 
@@ -34,7 +34,7 @@ export function FacturesListPage() {
   const [recherche, setRecherche] = useState('');
   const [classeId, setClasseId] = useState<string | null>(null);
 
-  const { data: classes } = useQuery({ queryKey: ['classes'], queryFn: fetchClasses });
+  const { data: classes } = useQuery({ queryKey: ['classes', 'courante'], queryFn: fetchClassesCourantes });
   const { data: elevesClasse } = useQuery({
     queryKey: ['classe-eleves', classeId],
     queryFn: () => fetchClasseEleves(classeId!),
@@ -174,11 +174,11 @@ export function FacturesListPage() {
         />
         <Select
           placeholder="Toutes les classes"
-          data={(classes ?? []).map((c) => ({ value: c.id, label: `${c.nom} (${c.anneeScolaire.libelle})` }))}
+          data={(classes ?? []).map((c) => ({ value: c.id, label: `${c.nom} (${c.niveau.nom})` }))}
           value={classeId}
           onChange={setClasseId}
           clearable
-          w={260}
+          w={{ base: '100%', sm: 260 }}
         />
         <input ref={fileInputRef} type="file" accept=".xlsx" hidden onChange={onFichierChoisi} />
         <Button
@@ -213,55 +213,57 @@ export function FacturesListPage() {
       )}
 
       {factures && facturesFiltrees.length > 0 && (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Élève</Table.Th>
-              <Table.Th>Libellé</Table.Th>
-              <Table.Th>Total</Table.Th>
-              <Table.Th>Payé</Table.Th>
-              <Table.Th>Statut</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {facturesFiltrees.map((f) => (
-              <Table.Tr key={f.id}>
-                <Table.Td>
-                  {f.eleve.prenom} {f.eleve.nom}
-                </Table.Td>
-                <Table.Td>{f.libelle}</Table.Td>
-                <Table.Td>{Number(f.montantTotal).toLocaleString('fr-FR')} GNF</Table.Td>
-                <Table.Td>{Number(f.montantPaye).toLocaleString('fr-FR')} GNF</Table.Td>
-                <Table.Td>
-                  <Badge color={STATUT_COLORS[f.statut]}>{f.statut}</Badge>
-                </Table.Td>
-                <Table.Td>
-                  <Group gap="xs">
-                    <Button size="xs" onClick={() => setFactureId(f.id)}>
-                      Encaisser
-                    </Button>
-                    <Button size="xs" variant="light" leftSection={<IconEye size={14} stroke={1.5} />} onClick={() => ouvrirFacturePdf(f.id)}>
-                      Voir la facture
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="light"
-                      color="orange"
-                      loading={rappelMutation.isPending}
-                      onClick={() => rappelMutation.mutate(f.id)}
-                    >
-                      Rappel SMS
-                    </Button>
-                    <Button size="xs" variant="light" color="grape" onClick={() => ouvrirModalMM(f)}>
-                      Mobile Money
-                    </Button>
-                  </Group>
-                </Table.Td>
+        <Table.ScrollContainer minWidth={620}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Élève</Table.Th>
+                <Table.Th>Libellé</Table.Th>
+                <Table.Th>Total</Table.Th>
+                <Table.Th>Payé</Table.Th>
+                <Table.Th>Statut</Table.Th>
+                <Table.Th />
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {facturesFiltrees.map((f) => (
+                <Table.Tr key={f.id}>
+                  <Table.Td>
+                    {f.eleve.prenom} {f.eleve.nom}
+                  </Table.Td>
+                  <Table.Td>{f.libelle}</Table.Td>
+                  <Table.Td>{Number(f.montantTotal).toLocaleString('fr-FR')} GNF</Table.Td>
+                  <Table.Td>{Number(f.montantPaye).toLocaleString('fr-FR')} GNF</Table.Td>
+                  <Table.Td>
+                    <Badge color={STATUT_COLORS[f.statut]}>{f.statut}</Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap="xs">
+                      <Button size="xs" onClick={() => setFactureId(f.id)}>
+                        Encaisser
+                      </Button>
+                      <Button size="xs" variant="light" leftSection={<IconEye size={14} stroke={1.5} />} onClick={() => ouvrirFacturePdf(f.id)}>
+                        Voir la facture
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="orange"
+                        loading={rappelMutation.isPending}
+                        onClick={() => rappelMutation.mutate(f.id)}
+                      >
+                        Rappel SMS
+                      </Button>
+                      <Button size="xs" variant="light" color="grape" onClick={() => ouvrirModalMM(f)}>
+                        Mobile Money
+                      </Button>
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
 
       <Modal opened={!!factureId} onClose={() => setFactureId(null)} title="Enregistrer un paiement">

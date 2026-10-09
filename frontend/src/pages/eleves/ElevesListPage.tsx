@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { Table, Title, Button, Group, Badge, Anchor, TextInput, Text, Select } from '@mantine/core';
 import { IconSearch, IconDownload } from '@tabler/icons-react';
 import { fetchEleves } from '../../api/eleves';
-import { fetchClasses, fetchClasseEleves } from '../../api/classes';
+import { fetchClassesCourantes, fetchClasseEleves } from '../../api/classes';
 import { telechargerExportEleves } from '../../api/reporting';
 import { correspond } from '../../lib/search';
 
@@ -12,7 +12,7 @@ export function ElevesListPage() {
   const [recherche, setRecherche] = useState('');
   const [classeId, setClasseId] = useState<string | null>(null);
 
-  const { data: classes } = useQuery({ queryKey: ['classes'], queryFn: fetchClasses });
+  const { data: classes } = useQuery({ queryKey: ['classes', 'courante'], queryFn: fetchClassesCourantes });
   const { data: eleves, isLoading } = useQuery({
     queryKey: ['eleves', classeId],
     queryFn: () => (classeId ? fetchClasseEleves(classeId) : fetchEleves()),
@@ -54,11 +54,11 @@ export function ElevesListPage() {
         />
         <Select
           placeholder="Toutes les classes"
-          data={(classes ?? []).map((c) => ({ value: c.id, label: `${c.nom} (${c.anneeScolaire.libelle})` }))}
+          data={(classes ?? []).map((c) => ({ value: c.id, label: `${c.nom} (${c.niveau.nom})` }))}
           value={classeId}
           onChange={setClasseId}
           clearable
-          w={260}
+          w={{ base: '100%', sm: 260 }}
         />
       </Group>
 
@@ -73,34 +73,36 @@ export function ElevesListPage() {
       )}
 
       {eleves && elevesFiltres.length > 0 && (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Matricule</Table.Th>
-              <Table.Th>Nom</Table.Th>
-              <Table.Th>Prénom</Table.Th>
-              <Table.Th>Genre</Table.Th>
-              <Table.Th />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {elevesFiltres.map((eleve) => (
-              <Table.Tr key={eleve.id}>
-                <Table.Td>{eleve.matricule ?? '—'}</Table.Td>
-                <Table.Td>{eleve.nom}</Table.Td>
-                <Table.Td>{eleve.prenom}</Table.Td>
-                <Table.Td>
-                  <Badge color={eleve.genre === 'F' ? 'pink' : 'blue'}>{eleve.genre}</Badge>
-                </Table.Td>
-                <Table.Td>
-                  <Anchor component={Link} to={`/eleves/${eleve.id}`}>
-                    Voir la fiche
-                  </Anchor>
-                </Table.Td>
+        <Table.ScrollContainer minWidth={620}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Matricule</Table.Th>
+                <Table.Th>Nom</Table.Th>
+                <Table.Th>Prénom</Table.Th>
+                <Table.Th>Genre</Table.Th>
+                <Table.Th />
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {elevesFiltres.map((eleve) => (
+                <Table.Tr key={eleve.id}>
+                  <Table.Td>{eleve.matricule ?? '—'}</Table.Td>
+                  <Table.Td>{eleve.nom}</Table.Td>
+                  <Table.Td>{eleve.prenom}</Table.Td>
+                  <Table.Td>
+                    <Badge color={eleve.genre === 'F' ? 'pink' : 'blue'}>{eleve.genre}</Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Anchor component={Link} to={`/eleves/${eleve.id}`}>
+                      Voir la fiche
+                    </Anchor>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
     </>
   );

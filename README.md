@@ -1,4 +1,4 @@
-# Kalanso
+# La cible du formateur
 
 Plateforme SaaS ERP de gestion scolaire pour les écoles privées guinéennes.
 
@@ -33,4 +33,4 @@ npm run dev
 
 Le backend écoute par défaut sur `http://localhost:3000`, le frontend sur `http://localhost:5173`.
 
-Identifiants de démo créés par le seed : voir `backend/prisma/seed.ts`.
+Identifiants créés par le seed : voir `backend/prisma/seed.ts`.

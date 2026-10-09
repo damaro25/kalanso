@@ -208,51 +208,53 @@ export function BibliothequePage() {
         )}
 
         {livresFiltres.length > 0 && (
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Titre</Table.Th>
-                <Table.Th>Auteur</Table.Th>
-                <Table.Th>Catégorie</Table.Th>
-                <Table.Th>Disponibles</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {livresFiltres.map((l) => (
-                <Table.Tr key={l.id}>
-                  <Table.Td>{l.titre}</Table.Td>
-                  <Table.Td>{l.auteur ?? '—'}</Table.Td>
-                  <Table.Td>{l.categorie ?? '—'}</Table.Td>
-                  <Table.Td>
-                    <Badge color={l.quantiteDisponible > 0 ? 'green' : 'red'}>
-                      {l.quantiteDisponible} / {l.quantiteTotale}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <Anchor component="button" type="button" onClick={() => ouvrirEditionLivre(l)}>
-                        Modifier
-                      </Anchor>
-                      <Anchor
-                        component="button"
-                        type="button"
-                        c="red"
-                        onClick={() =>
-                          confirmerSuppression({
-                            message: `Voulez-vous vraiment supprimer « ${l.titre} » ? Cette action est définitive.`,
-                            onConfirm: () => deleteLivreMutation.mutate(l.id),
-                          })
-                        }
-                      >
-                        Supprimer
-                      </Anchor>
-                    </Group>
-                  </Table.Td>
+          <Table.ScrollContainer minWidth={620}>
+            <Table striped highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Titre</Table.Th>
+                  <Table.Th>Auteur</Table.Th>
+                  <Table.Th>Catégorie</Table.Th>
+                  <Table.Th>Disponibles</Table.Th>
+                  <Table.Th />
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {livresFiltres.map((l) => (
+                  <Table.Tr key={l.id}>
+                    <Table.Td>{l.titre}</Table.Td>
+                    <Table.Td>{l.auteur ?? '—'}</Table.Td>
+                    <Table.Td>{l.categorie ?? '—'}</Table.Td>
+                    <Table.Td>
+                      <Badge color={l.quantiteDisponible > 0 ? 'green' : 'red'}>
+                        {l.quantiteDisponible} / {l.quantiteTotale}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap="xs">
+                        <Anchor component="button" type="button" onClick={() => ouvrirEditionLivre(l)}>
+                          Modifier
+                        </Anchor>
+                        <Anchor
+                          component="button"
+                          type="button"
+                          c="red"
+                          onClick={() =>
+                            confirmerSuppression({
+                              message: `Voulez-vous vraiment supprimer « ${l.titre} » ? Cette action est définitive.`,
+                              onConfirm: () => deleteLivreMutation.mutate(l.id),
+                            })
+                          }
+                        >
+                          Supprimer
+                        </Anchor>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
         )}
       </Paper>
 
@@ -278,50 +280,52 @@ export function BibliothequePage() {
         {emprunts && emprunts.length === 0 && <Text c="dimmed">Aucun emprunt dans cette catégorie.</Text>}
 
         {emprunts && emprunts.length > 0 && (
-          <Table striped highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Livre</Table.Th>
-                <Table.Th>Élève</Table.Th>
-                <Table.Th>Emprunté le</Table.Th>
-                <Table.Th>Retour prévu</Table.Th>
-                <Table.Th>Statut</Table.Th>
-                <Table.Th />
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {emprunts.map((e) => (
-                <Table.Tr key={e.id}>
-                  <Table.Td>{e.livre.titre}</Table.Td>
-                  <Table.Td>
-                    {e.eleve.prenom} {e.eleve.nom}
-                  </Table.Td>
-                  <Table.Td>{new Date(e.dateEmprunt).toLocaleDateString('fr-FR')}</Table.Td>
-                  <Table.Td>{new Date(e.dateRetourPrevue).toLocaleDateString('fr-FR')}</Table.Td>
-                  <Table.Td>
-                    {e.statut === 'RETOURNE' ? (
-                      <Badge color="gray">Retourné</Badge>
-                    ) : e.enRetard ? (
-                      <Badge color="red">En retard</Badge>
-                    ) : (
-                      <Badge color="green">En cours</Badge>
-                    )}
-                  </Table.Td>
-                  <Table.Td>
-                    {e.statut === 'EN_COURS' && (
-                      <Anchor
-                        component="button"
-                        type="button"
-                        onClick={() => retournerMutation.mutate(e.id)}
-                      >
-                        Marquer retourné
-                      </Anchor>
-                    )}
-                  </Table.Td>
+          <Table.ScrollContainer minWidth={620}>
+            <Table striped highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Livre</Table.Th>
+                  <Table.Th>Élève</Table.Th>
+                  <Table.Th>Emprunté le</Table.Th>
+                  <Table.Th>Retour prévu</Table.Th>
+                  <Table.Th>Statut</Table.Th>
+                  <Table.Th />
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {emprunts.map((e) => (
+                  <Table.Tr key={e.id}>
+                    <Table.Td>{e.livre.titre}</Table.Td>
+                    <Table.Td>
+                      {e.eleve.prenom} {e.eleve.nom}
+                    </Table.Td>
+                    <Table.Td>{new Date(e.dateEmprunt).toLocaleDateString('fr-FR')}</Table.Td>
+                    <Table.Td>{new Date(e.dateRetourPrevue).toLocaleDateString('fr-FR')}</Table.Td>
+                    <Table.Td>
+                      {e.statut === 'RETOURNE' ? (
+                        <Badge color="gray">Retourné</Badge>
+                      ) : e.enRetard ? (
+                        <Badge color="red">En retard</Badge>
+                      ) : (
+                        <Badge color="green">En cours</Badge>
+                      )}
+                    </Table.Td>
+                    <Table.Td>
+                      {e.statut === 'EN_COURS' && (
+                        <Anchor
+                          component="button"
+                          type="button"
+                          onClick={() => retournerMutation.mutate(e.id)}
+                        >
+                          Marquer retourné
+                        </Anchor>
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
         )}
       </Paper>
 

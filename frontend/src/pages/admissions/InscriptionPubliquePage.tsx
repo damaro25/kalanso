@@ -206,14 +206,14 @@ export function InscriptionPubliquePage() {
           )}
 
           <Group align="flex-end">
-            <Select label="Type" data={TYPES_DOCUMENT} value={typeDoc} onChange={setTypeDoc} w={200} />
+            <Select label="Type" data={TYPES_DOCUMENT} value={typeDoc} onChange={setTypeDoc} w={{ base: '100%', sm: 200 }} />
             <FileInput
               label="Fichier"
               placeholder="Choisir un fichier"
               accept={ACCEPT_FICHIERS}
               value={fichierDoc}
               onChange={setFichierDoc}
-              w={220}
+              w={{ base: '100%', sm: 220 }}
             />
             <Button variant="light" disabled={!typeDoc || !fichierDoc} onClick={ajouterPiece}>
               Ajouter le document

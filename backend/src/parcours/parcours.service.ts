@@ -4,7 +4,7 @@ import { FacturesService } from '../finances/factures.service';
 import { calculerMoyenne } from '../notes/bulletin.service';
 import { ValiderPassageDto } from './dto/parcours.dto';
 
-// Barème de passage : moyenne annuelle >= 5/10 (les notes Kalanso sont plafonnées à 10).
+// Barème de passage : moyenne annuelle >= 5/10 (les notes sont plafonnées à 10).
 export const SEUIL_PASSAGE = 5;
 
 export type Decision = 'ADMIS' | 'REDOUBLE';

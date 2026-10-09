@@ -14,7 +14,7 @@ import {
   SegmentedControl,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { fetchClasses, fetchClasseEleves } from '../../api/classes';
+import { fetchClassesCourantes, fetchClasseEleves } from '../../api/classes';
 import { fetchMessages, envoyerMessage } from '../../api/communication';
 import { useAuth } from '../../auth/AuthContext';
 
@@ -40,7 +40,7 @@ export function CommunicationPage() {
   const [eleveId, setEleveId] = useState<string | null>(null);
   const [contenu, setContenu] = useState('');
 
-  const { data: classes } = useQuery({ queryKey: ['classes'], queryFn: fetchClasses });
+  const { data: classes } = useQuery({ queryKey: ['classes', 'courante'], queryFn: fetchClassesCourantes });
   const { data: eleves } = useQuery({
     queryKey: ['classe-eleves', classeId],
     queryFn: () => fetchClasseEleves(classeId!),
@@ -96,7 +96,7 @@ export function CommunicationPage() {
                   setClasseId(v);
                   setEleveId(null);
                 }}
-                w={220}
+                w={{ base: '100%', sm: 220 }}
               />
               {cible === 'ELEVE' && (
                 <Select
@@ -104,7 +104,7 @@ export function CommunicationPage() {
                   data={(eleves ?? []).map((e: any) => ({ value: e.id, label: `${e.prenom} ${e.nom}` }))}
                   value={eleveId}
                   onChange={setEleveId}
-                  w={220}
+                  w={{ base: '100%', sm: 220 }}
                 />
               )}
             </Group>
@@ -130,42 +130,44 @@ export function CommunicationPage() {
       {messages && messages.length === 0 && <Text c="dimmed">Aucun message envoyé pour l'instant.</Text>}
 
       {messages && messages.length > 0 && (
-        <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Date</Table.Th>
-              <Table.Th>Élève</Table.Th>
-              <Table.Th>Parent</Table.Th>
-              <Table.Th>Téléphone</Table.Th>
-              <Table.Th>Type</Table.Th>
-              <Table.Th>Statut</Table.Th>
-              <Table.Th>Message</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {messages.map((m) => (
-              <Table.Tr key={m.id}>
-                <Table.Td>{new Date(m.createdAt).toLocaleString('fr-FR')}</Table.Td>
-                <Table.Td>{m.eleve ? `${m.eleve.prenom} ${m.eleve.nom}` : '—'}</Table.Td>
-                <Table.Td>{m.parentTuteur ? `${m.parentTuteur.prenom} ${m.parentTuteur.nom}` : '—'}</Table.Td>
-                <Table.Td>{m.telephone}</Table.Td>
-                <Table.Td>
-                  <Badge color={TYPE_LABELS[m.type]?.color ?? 'gray'} variant="light">
-                    {TYPE_LABELS[m.type]?.label ?? m.type}
-                  </Badge>
-                </Table.Td>
-                <Table.Td>
-                  <Badge color={STATUT_COLORS[m.statut] ?? 'gray'}>{m.statut}</Badge>
-                </Table.Td>
-                <Table.Td maw={320}>
-                  <Text size="sm" lineClamp={2}>
-                    {m.contenu}
-                  </Text>
-                </Table.Td>
+        <Table.ScrollContainer minWidth={620}>
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Date</Table.Th>
+                <Table.Th>Élève</Table.Th>
+                <Table.Th>Parent</Table.Th>
+                <Table.Th>Téléphone</Table.Th>
+                <Table.Th>Type</Table.Th>
+                <Table.Th>Statut</Table.Th>
+                <Table.Th>Message</Table.Th>
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {messages.map((m) => (
+                <Table.Tr key={m.id}>
+                  <Table.Td>{new Date(m.createdAt).toLocaleString('fr-FR')}</Table.Td>
+                  <Table.Td>{m.eleve ? `${m.eleve.prenom} ${m.eleve.nom}` : '—'}</Table.Td>
+                  <Table.Td>{m.parentTuteur ? `${m.parentTuteur.prenom} ${m.parentTuteur.nom}` : '—'}</Table.Td>
+                  <Table.Td>{m.telephone}</Table.Td>
+                  <Table.Td>
+                    <Badge color={TYPE_LABELS[m.type]?.color ?? 'gray'} variant="light">
+                      {TYPE_LABELS[m.type]?.label ?? m.type}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>
+                    <Badge color={STATUT_COLORS[m.statut] ?? 'gray'}>{m.statut}</Badge>
+                  </Table.Td>
+                  <Table.Td maw={320}>
+                    <Text size="sm" lineClamp={2}>
+                      {m.contenu}
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       )}
     </Stack>
   );

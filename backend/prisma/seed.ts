@@ -5,17 +5,16 @@ import * as bcrypt from 'bcrypt';
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL as string });
 const prisma = new PrismaClient({ adapter });
 
-const DEMO_PASSWORD = 'kalanso2026';
+const MOT_DE_PASSE_INITIAL = 'kalanso2026';
 
 async function main() {
   const ecole = await prisma.ecole.upsert({
-    where: { id: 'ecole-demo' },
+    where: { id: 'ecole-la-cible' },
     update: {},
     create: {
-      id: 'ecole-demo',
-      nom: 'École La Cible du Formateur - Démo',
+      id: 'ecole-la-cible',
+      nom: 'École La Cible du Formateur',
       ville: 'Conakry',
-      email: 'demo@kalanso.gn',
     },
   });
 
@@ -92,7 +91,7 @@ async function main() {
     });
   }
 
-  const motDePasseHash = await bcrypt.hash(DEMO_PASSWORD, 12);
+  const motDePasseHash = await bcrypt.hash(MOT_DE_PASSE_INITIAL, 12);
 
   const utilisateursDefinitions = [
     { role: 'FONDATEUR', nom: 'Camara', prenom: 'Fondateur', email: 'fondateur@kalanso.gn' },
@@ -150,7 +149,7 @@ async function main() {
   }
 
   console.log('Seed terminé.');
-  console.log(`Mot de passe de démo pour tous les comptes : ${DEMO_PASSWORD}`);
+  console.log(`Mot de passe initial de tous les comptes : ${MOT_DE_PASSE_INITIAL}`);
   for (const def of utilisateursDefinitions) {
     console.log(`  ${def.role.padEnd(20)} ${def.email}`);
   }

@@ -5,7 +5,7 @@ import { notifications } from '@mantine/notifications';
 import { IconDownload, IconEye } from '@tabler/icons-react';
 import { useState } from 'react';
 import { fetchEleveFiche, inscrireEleve } from '../../api/eleves';
-import { fetchClasses } from '../../api/classes';
+import { fetchClassesCourantes } from '../../api/classes';
 import { createPaiement, ouvrirFacturePdf, ouvrirRecu } from '../../api/finances';
 import { telechargerBulletin, ouvrirBulletinPdf } from '../../api/notes';
 import { usePendingIds } from '../../offline/outbox';
@@ -23,7 +23,7 @@ export function EleveDetailPage() {
     enabled: !!id,
   });
 
-  const { data: classes } = useQuery({ queryKey: ['classes'], queryFn: fetchClasses });
+  const { data: classes } = useQuery({ queryKey: ['classes', 'courante'], queryFn: fetchClassesCourantes });
 
   const mutation = useMutation({
     mutationFn: (classeId: string) => inscrireEleve(id!, classeId),
@@ -70,7 +70,7 @@ export function EleveDetailPage() {
         )}
       </Group>
 
-      <SimpleGrid cols={3}>
+      <SimpleGrid cols={{ base: 1, sm: 3 }}>
         <Paper withBorder p="md">
           <Text size="sm" c="dimmed">
             Classe actuelle
@@ -103,7 +103,7 @@ export function EleveDetailPage() {
             data={(classes ?? []).map((c) => ({ value: c.id, label: `${c.nom} (${c.niveau.nom})` }))}
             value={selectedClasse}
             onChange={setSelectedClasse}
-            w={280}
+            w={{ base: '100%', sm: 280 }}
           />
           <Button disabled={!selectedClasse} loading={mutation.isPending} onClick={() => selectedClasse && mutation.mutate(selectedClasse)}>
             Affecter
@@ -165,7 +165,7 @@ export function EleveDetailPage() {
             ]}
             value={trimestreBulletin}
             onChange={setTrimestreBulletin}
-            w={160}
+            w={{ base: '100%', sm: 160 }}
           />
           <Button
             leftSection={<IconDownload size={16} stroke={1.5} />}

@@ -27,11 +27,11 @@ export function LoginPage() {
 
   return (
     <Center h="100vh" bg="kalanso.0">
-      <Paper shadow="md" p="xl" w={380} withBorder>
+      <Paper shadow="md" p="xl" w={{ base: '100%', sm: 380 }} withBorder>
         <form onSubmit={handleSubmit}>
           <Stack>
             <Title order={2} c="kalanso.7">
-              Kalanso
+              La cible du formateur
             </Title>
             {error && <Alert color="red">{error}</Alert>}
             <TextInput

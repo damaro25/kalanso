@@ -170,34 +170,36 @@ export function PersonnelDetailPage() {
         </Text>
         {personnel.creneaux.length === 0 && <Text c="dimmed">Aucun créneau assigné.</Text>}
         {personnel.creneaux.length > 0 && (
-          <Table striped>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Jour</Table.Th>
-                <Table.Th>Horaire</Table.Th>
-                <Table.Th>Classe</Table.Th>
-                <Table.Th>Matière</Table.Th>
-                <Table.Th>Salle</Table.Th>
-                {estEnseignant && <Table.Th>Taux horaire</Table.Th>}
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {personnel.creneaux.map((c: any) => (
-                <Table.Tr key={c.id}>
-                  <Table.Td>{JOURS.find((j) => j.value === c.jour)?.label ?? c.jour}</Table.Td>
-                  <Table.Td>
-                    {c.heureDebut} – {c.heureFin}
-                  </Table.Td>
-                  <Table.Td>{c.classe.nom}</Table.Td>
-                  <Table.Td>{c.matiere.nom}</Table.Td>
-                  <Table.Td>{c.salle ? c.salle.nom : '—'}</Table.Td>
-                  {estEnseignant && (
-                    <Table.Td>{c.tauxHoraire ? `${Number(c.tauxHoraire).toLocaleString('fr-FR')} GNF` : '—'}</Table.Td>
-                  )}
+          <Table.ScrollContainer minWidth={620}>
+            <Table striped>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Jour</Table.Th>
+                  <Table.Th>Horaire</Table.Th>
+                  <Table.Th>Classe</Table.Th>
+                  <Table.Th>Matière</Table.Th>
+                  <Table.Th>Salle</Table.Th>
+                  {estEnseignant && <Table.Th>Taux horaire</Table.Th>}
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {personnel.creneaux.map((c: any) => (
+                  <Table.Tr key={c.id}>
+                    <Table.Td>{JOURS.find((j) => j.value === c.jour)?.label ?? c.jour}</Table.Td>
+                    <Table.Td>
+                      {c.heureDebut} – {c.heureFin}
+                    </Table.Td>
+                    <Table.Td>{c.classe.nom}</Table.Td>
+                    <Table.Td>{c.matiere.nom}</Table.Td>
+                    <Table.Td>{c.salle ? c.salle.nom : '—'}</Table.Td>
+                    {estEnseignant && (
+                      <Table.Td>{c.tauxHoraire ? `${Number(c.tauxHoraire).toLocaleString('fr-FR')} GNF` : '—'}</Table.Td>
+                    )}
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
         )}
       </Paper>
 
