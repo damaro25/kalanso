@@ -6,6 +6,7 @@ import { LoginPage } from './pages/login/LoginPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { ElevesListPage } from './pages/eleves/ElevesListPage';
 import { EleveDetailPage } from './pages/eleves/EleveDetailPage';
+import { CartesScolairesPage } from './pages/cartes/CartesScolairesPage';
 import { ClassesListPage } from './pages/classes/ClassesListPage';
 import { ClasseDetailPage } from './pages/classes/ClasseDetailPage';
 import { NiveauxPage } from './pages/classes/NiveauxPage';
@@ -49,6 +50,7 @@ function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/eleves" element={<ElevesListPage />} />
             <Route path="/eleves/:id" element={<EleveDetailPage />} />
+            <Route path="/cartes-scolaires" element={<CartesScolairesPage />} />
             <Route path="/classes" element={<ClassesListPage />} />
             <Route path="/classes/:id" element={<ClasseDetailPage />} />
             <Route path="/niveaux" element={<NiveauxPage />} />

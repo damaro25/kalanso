@@ -6,6 +6,7 @@ import {
   IconLayoutDashboard,
   IconUsers,
   IconUserPlus,
+  IconId,
   IconChalkboard,
   IconNotebook,
   IconBook2,
@@ -59,6 +60,7 @@ const GROUPS: MenuGroup[] = [
       { label: 'Élèves', to: '/eleves', icon: IconUsers },
       { label: 'Admissions', to: '/admissions', icon: IconUserPlus, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'SECRETAIRE'] },
       { label: 'Classes', to: '/classes', icon: IconChalkboard },
+      { label: 'Cartes scolaires', to: '/cartes-scolaires', icon: IconId, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'SECRETAIRE'] },
       { label: 'Notes', to: '/notes', icon: IconNotebook, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'ENSEIGNANT'] },
       { label: 'Matières', to: '/matieres', icon: IconBook2, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT'] },
       {
