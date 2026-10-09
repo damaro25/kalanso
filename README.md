@@ -34,3 +34,7 @@ npm run dev
 Le backend écoute par défaut sur `http://localhost:3000`, le frontend sur `http://localhost:5173`.
 
 Identifiants créés par le seed : voir `backend/prisma/seed.ts`.
+
+## Déploiement
+
+Installation sur un serveur Ubuntu (PostgreSQL, service systemd, Nginx, HTTPS, sauvegardes, mise à jour) : [docs/DEPLOIEMENT_UBUNTU.md](docs/DEPLOIEMENT_UBUNTU.md).
