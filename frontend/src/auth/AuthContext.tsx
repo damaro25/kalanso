@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
 import { apiClient } from '../api/client';
 import type { Role } from '../lib/roles';
+import { purgerCacheUtilisateur } from '../offline/purgerCache';
 
 interface AuthUser {
   id: string;
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function login(email: string, password: string) {
     const { data } = await apiClient.post('/auth/login', { email, password });
+    await purgerCacheUtilisateur(); // jamais les données en cache d'une autre session
     localStorage.setItem('kalanso_token', data.accessToken);
     localStorage.setItem('kalanso_user', JSON.stringify(data.user));
     setUser(data.user);
@@ -37,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function logout() {
     localStorage.removeItem('kalanso_token');
     localStorage.removeItem('kalanso_user');
+    void purgerCacheUtilisateur();
     setUser(null);
   }
 

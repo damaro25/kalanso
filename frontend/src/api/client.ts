@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { purgerCacheUtilisateur } from '../offline/purgerCache';
 
 export const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
@@ -23,7 +24,10 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('kalanso_token');
       localStorage.removeItem('kalanso_user');
-      window.location.href = '/login';
+      // Session expirée : on vide aussi les données en cache avant de revenir à la connexion.
+      void purgerCacheUtilisateur().finally(() => {
+        window.location.href = '/login';
+      });
     }
     return Promise.reject(error);
   },
