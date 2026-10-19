@@ -185,46 +185,54 @@ describe('FinanceExportService.tresorerieXlsx (téléchargement du tableau de tr
 
 describe('FinanceExportService.bordereauJournalierXlsx (bordereau journalier en Excel)', () => {
   const ligne = (over: Record<string, unknown> = {}) => ({
-    numeroRecu: 'cmtha0tsx000g80imhart8hw3',
-    numeroFacture: 'cmtha0tsx000f80imfacture01',
+    paiementIds: ['cmtha0tsx000g80imhart8hw3'],
+    numerosRecu: ['001480'],
     eleveId: 'e1',
     matricule: '383CR021',
     nomComplet: 'Djiné KANTE',
     classe: 'PSM',
     niveau: 'PSM',
-    typeOperation: 'Trimestre 1',
+    fraisInscription: 0,
+    typeInscription: '',
+    assurance: 0,
+    totalInscriptionAssurance: 0,
     fraisEtudes: 3600000,
+    fraisFormations: 0,
     totalPaye: 3600000,
     date: '2026-10-08',
     observation: 'Espèces',
     ...over,
   });
+  const TOTAUX_NULS = { fraisInscription: 0, assurance: 0, totalInscriptionAssurance: 0, fraisEtudes: 0, fraisFormations: 0, totalPaye: 0 };
   const bordereau = (lignes: any[], totaux: Record<string, number>) => ({
     date: '2026-10-08',
-    ecole: { nom: 'Les Ecoles Mamé-TA', ville: 'Conakry' },
+    ecole: { nom: 'Les Ecoles Mamé-TA', sigle: 'MTA', ville: 'Conakry', nomDirecteur: 'Mamadou DIALLO', nomComptable: 'Aïssata SOW' },
     filtres: { niveaux: [{ id: 'n1', nom: 'Petite Section' }, { id: 'n2', nom: '6eme' }] },
     lignes,
-    totaux: { fraisEtudes: 0, totalPaye: 0, ...totaux },
+    totaux: { ...TOTAUX_NULS, ...totaux },
   });
 
   async function lire(buffer: Buffer) {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer as any);
     const feuille = wb.worksheets[0];
-    const lignes: unknown[][] = [];
-    feuille.eachRow((row) => lignes.push((row.values as unknown[]).slice(1)));
-    return { feuille, lignes };
+    const valeurs = (r: number) => Array.from({ length: 14 }, (_, i) => feuille.getCell(r, i + 1).value ?? '');
+    return { feuille, valeurs };
   }
 
-  it('reproduit la feuille papier : en-tête, une ligne par reçu, totaux, ville et date, signatures', async () => {
+  it('reproduit la feuille papier : en-tête, une ligne par élève, totaux encadrés, ville et date, signatures', async () => {
     const finance = {
       bordereauJournalier: jest.fn().mockResolvedValue(
         bordereau(
           [
             ligne(),
-            ligne({ numeroRecu: 'rec-2', numeroFacture: 'fac-2', eleveId: 'e2', matricule: '498MS022', nomComplet: 'Kadiatou BAH', classe: 'MSM', typeOperation: 'Inscription', fraisEtudes: 0, totalPaye: 150000, observation: 'Virement' }),
+            ligne({
+              paiementIds: ['rec-2', 'rec-3'], numerosRecu: ['001481', '001482'], eleveId: 'e2', matricule: '498MS022',
+              nomComplet: 'Kadiatou BAH', classe: 'MSM', fraisInscription: 150000, typeInscription: 'Inscription',
+              assurance: 25000, totalInscriptionAssurance: 175000, fraisEtudes: 0, fraisFormations: 25000, totalPaye: 200000, observation: 'Virement, Espèces',
+            }),
           ],
-          { fraisEtudes: 3600000, totalPaye: 3750000 },
+          { fraisInscription: 150000, assurance: 25000, totalInscriptionAssurance: 175000, fraisEtudes: 3600000, fraisFormations: 25000, totalPaye: 3800000 },
         ),
       ),
     };
@@ -235,38 +243,60 @@ describe('FinanceExportService.bordereauJournalierXlsx (bordereau journalier en 
     expect(finance.bordereauJournalier).toHaveBeenCalledWith('ecole', { date: '2026-10-08' });
     expect(nomFichier).toBe('bordereau-journalier-2026-10-08.xlsx');
 
-    const { feuille, lignes } = await lire(buffer);
+    const { feuille, valeurs } = await lire(buffer);
     expect(feuille.name).toBe('Bordereau journalier');
-    expect(lignes[0][0]).toBe('Les Ecoles Mamé-TA');
-    expect(feuille.getCell('A4').value).toBe('BORDEREAU JOURNALIER');
-    expect(lignes.find((l) => String(l[0]).startsWith('Date :'))?.[0]).toBe('Date : 08/10/2026');
+    expect(feuille.pageSetup.orientation).toBe('landscape');
 
-    // plus de colonnes « frais d'inscription » ni « type d'inscription » : un « type d'opération » à la place
-    const entete = lignes.find((l) => l[0] === 'N°')!;
-    expect(entete).toEqual([
-      'N°', 'Classe', 'Reçu N°', 'Facture N°', 'Matricule', 'Prénoms & Nom',
-      "Type d'opération", 'Jour du versement', "Frais d'études payés", 'Total payé', 'Observation',
+    // en-tête
+    expect(feuille.getCell('A1').value).toBe('LES ECOLES MAMÉ-TA');
+    expect(feuille.getCell('A1').font.color?.argb).toBe('FF2E75B6');
+    expect(feuille.getCell('L1').value).toBe('REPUBLIQUE DE GUINEE');
+    expect(feuille.getCell('L2').value).toBe('Travail-Justice-Solidarité');
+    expect(feuille.getCell('M3').value).toBe(3800000); // total du jour sur fond jaune
+    expect((feuille.getCell('M3').fill as ExcelJS.FillPattern).fgColor?.argb).toBe('FFFFFF00');
+    expect(feuille.getCell('A5').value).toBe('BORDEREAU JOURNALIER');
+
+    expect(valeurs(7)).toEqual([
+      'N°', 'Classe', 'Reçu', 'Matricule', 'Prénoms & Nom', 'Frais inscription', 'Type inscription', 'T-shirt',
+      'Total frais insc + Ass', 'Jour versement', 'Frais études payés', 'Formations', 'Total payé', 'Observation',
     ]);
-    expect(entete).not.toContain("Frais d'inscription");
-    expect(entete).not.toContain("Type d'inscription");
+    expect((feuille.getCell('A7').fill as ExcelJS.FillPattern).fgColor?.argb).toBe('FF2E75B6');
 
-    expect(lignes).toContainEqual([1, 'PSM', 'cmtha0tsx000g80imhart8hw3', 'cmtha0tsx000f80imfacture01', '383CR021', 'Djiné KANTE', 'Trimestre 1', '08/10/2026', 3600000, 3600000, 'Espèces']);
-    // une inscription n'a pas de frais d'études : cellule vide, mais un total payé
-    expect(lignes).toContainEqual([2, 'MSM', 'rec-2', 'fac-2', '498MS022', 'Kadiatou BAH', 'Inscription', '08/10/2026', '', 150000, 'Virement']);
-    expect(lignes).toContainEqual(['', '', '', '', '', 'Totaux', '', '', 3600000, 3750000, '']);
-    expect(lignes.find((l) => l[0] === 'Conakry, le 08/10/2026')).toBeDefined();
-    expect(lignes.find((l) => l[0] === 'Directeur Général')).toContain('Percepteur-Comptable');
+    // montants nuls : cases vides ; plusieurs reçus du même élève l'un sous l'autre
+    expect(valeurs(8)).toEqual([1, 'PSM', '001480', '383CR021', 'Djiné KANTE', '', '', '', '', '08/10/2026', 3600000, '', 3600000, 'Espèces']);
+    expect(valeurs(9)).toEqual([
+      2, 'MSM', '001481\n001482', '498MS022', 'Kadiatou BAH', 150000, 'Inscription', 25000, 175000, '08/10/2026', '', 25000, 200000, 'Virement, Espèces',
+    ]);
+    expect((feuille.getCell('A9').fill as ExcelJS.FillPattern).fgColor?.argb).toBe('FFDDEBF7'); // une ligne sur deux
+
+    expect(valeurs(10)).toEqual(['', '', '', '', 'Totaux', 150000, '', 25000, 175000, '', 3600000, 25000, 3800000, '']);
+    expect(feuille.getCell('M10').border.top?.style).toBe('thin');
+
+    expect(feuille.getCell('L12').value).toBe('Conakry, le 08/10/2026');
+    expect(feuille.getCell('B14').value).toBe('Directeur Général');
+    expect(feuille.getCell('K14').value).toBe('Percepteur-Comptable');
+    expect(feuille.getCell('B17').value).toBe('Mamadou DIALLO');
+    expect(feuille.getCell('K17').value).toBe('Aïssata SOW');
   });
 
-  it('indique le niveau filtré dans le titre et dans le nom du fichier', async () => {
+  it('indique le niveau filtré sous le titre et dans le nom du fichier', async () => {
     const finance = { bordereauJournalier: jest.fn().mockResolvedValue(bordereau([], {})) };
     const service = new FinanceExportService(finance as any);
 
     const { buffer, nomFichier } = await service.bordereauJournalierXlsx('ecole', { date: '2026-10-08', niveauId: 'n1' });
 
     expect(nomFichier).toBe('bordereau-journalier-2026-10-08-Petite-Section.xlsx');
-    const { lignes } = await lire(buffer);
-    expect(lignes.find((l) => String(l[0]).startsWith('Date :'))?.[0]).toBe('Date : 08/10/2026  ·  Niveau : Petite Section');
+    const { feuille } = await lire(buffer);
+    expect(feuille.getCell('A6').value).toBe('Niveau : Petite Section');
+  });
+
+  it("sans ville ni signataires : « Le JJ/MM/AAAA » et noms vides", async () => {
+    const b = bordereau([], {});
+    b.ecole = { ...b.ecole, ville: null as any, nomDirecteur: null as any, nomComptable: null as any };
+    const service = new FinanceExportService({ bordereauJournalier: jest.fn().mockResolvedValue(b) } as any);
+    const { feuille } = await lire((await service.bordereauJournalierXlsx('ecole', {})).buffer);
+    expect(feuille.getCell('L10').value).toBe('Le 08/10/2026');
+    expect(feuille.getCell('B15').value ?? '').toBe('');
   });
 
   it('formate les montants avec séparateur de milliers', async () => {
@@ -274,9 +304,10 @@ describe('FinanceExportService.bordereauJournalierXlsx (bordereau journalier en 
       bordereauJournalier: jest.fn().mockResolvedValue(bordereau([ligne()], { fraisEtudes: 3600000, totalPaye: 3600000 })),
     } as any);
     const { feuille } = await lire((await service.bordereauJournalierXlsx('ecole', {})).buffer);
-    expect(feuille.getCell('I8').numFmt).toBe('#,##0');
-    expect(feuille.getCell('I8').value).toBe(3600000);
-    expect(feuille.getCell('J8').numFmt).toBe('#,##0');
+    expect(feuille.getCell('K8').numFmt).toBe('#,##0');
+    expect(feuille.getCell('K8').value).toBe(3600000);
+    expect(feuille.getCell('M8').numFmt).toBe('#,##0');
+    expect(feuille.getCell('M3').numFmt).toBe('#,##0');
   });
 });
 

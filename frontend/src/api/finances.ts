@@ -1,10 +1,27 @@
 import { apiClient } from './client';
 import { offlineMutation } from '../offline/offlineMutation';
+import { rafraichirFinances } from './budget';
+
+// Régime de l'élève : détermine les tarifs d'écolage qui lui sont facturés.
+export type Regime = 'EXTERNAT' | 'SEMI_INTERNAT' | 'INTERNAT' | 'PENSIONNAT';
+
+export const REGIMES: { value: Regime; label: string }[] = [
+  { value: 'EXTERNAT', label: 'Externat' },
+  { value: 'SEMI_INTERNAT', label: 'Semi-internat' },
+  { value: 'INTERNAT', label: 'Internat' },
+  { value: 'PENSIONNAT', label: 'Pensionnat' },
+];
+
+export function libelleRegime(regime: Regime | null | undefined): string {
+  return REGIMES.find((r) => r.value === regime)?.label ?? 'Tous régimes';
+}
 
 export interface TarifEcolage {
   id: string;
   libelle: string;
   montant: string;
+  regime: Regime | null;
+  dateEcheance: string | null;
   anneeScolaireId: string;
   niveau: { id: string; nom: string };
   anneeScolaire: { id: string; libelle: string } | null;
@@ -16,6 +33,9 @@ export interface Facture {
   montantTotal: string;
   montantPaye: string;
   statut: 'IMPAYEE' | 'PARTIELLE' | 'PAYEE' | 'ANNULEE';
+  type?: 'ECOLAGE' | 'INSCRIPTION' | 'AUTRE' | 'FORMATION' | 'ASSURANCE';
+  anneeScolaire?: { id: string; libelle: string } | null; // liste des impayés
+  arriere?: boolean; // facture d'une année passée, toujours due
   dateEcheance: string | null;
   eleve: { id: string; nom: string; prenom: string; matricule: string | null };
 }
@@ -39,6 +59,8 @@ export interface CreateTarifInput {
   anneeScolaireId: string;
   libelle: string;
   montant: number;
+  regime?: Regime;
+  dateEcheance?: string;
 }
 
 export async function fetchTarifs(): Promise<TarifEcolage[]> {
@@ -55,6 +77,8 @@ export interface UpdateTarifInput {
   libelle?: string;
   montant?: number;
   anneeScolaireId?: string;
+  regime?: Regime | null;
+  dateEcheance?: string | null;
 }
 
 export async function updateTarif(id: string, input: UpdateTarifInput): Promise<TarifEcolage> {
@@ -122,6 +146,12 @@ export async function createFacture(input: CreateFactureInput): Promise<Facture>
 // createPaiement fait un create() brut côté serveur (pas d'upsert) : id
 // pré-généré côté client + garde-fou d'idempotence dans paiements.service.ts.
 export async function createPaiement(input: CreatePaiementInput): Promise<{ id: string }> {
+  const resultat = await enregistrerPaiement(input);
+  rafraichirFinances(); // budget de trésorerie, bordereau, bilan : à jour tout de suite
+  return resultat;
+}
+
+function enregistrerPaiement(input: CreatePaiementInput): Promise<{ id: string }> {
   return offlineMutation<CreatePaiementInput, { id: string }>({
     method: 'POST',
     url: '/paiements',

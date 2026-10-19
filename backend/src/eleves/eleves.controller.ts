@@ -1,15 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, ParseEnumPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayloadUser } from '../common/decorators/current-user.decorator';
-import { RoleUtilisateur } from '../generated/prisma/enums';
+import { Regime, RoleUtilisateur } from '../generated/prisma/enums';
 import { ROLES_SANS_ENSEIGNANT } from '../common/roles.constants';
 import { PerimetreService } from '../common/perimetre/perimetre.service';
 import { ElevesService } from './eleves.service';
 import { UpdateEleveDto } from './dto/eleve.dto';
-import { CreateParentTuteurDto, LinkParentDto } from './dto/parent-tuteur.dto';
+import { CreateParentTuteurDto, FiliationDto, LinkParentDto } from './dto/parent-tuteur.dto';
 import { CreateInscriptionDto } from './dto/inscription.dto';
 
 const ROLES_GESTION = [RoleUtilisateur.FONDATEUR, RoleUtilisateur.CHEF_ETABLISSEMENT, RoleUtilisateur.SECRETAIRE];
@@ -23,9 +23,18 @@ export class ElevesController {
   ) {}
 
   // Un enseignant ne voit que les élèves de ses classes (voir PerimetreService).
+  // Filtres facultatifs : classe et régime (celui de l'inscription en cours).
   @Get('eleves')
-  async findAll(@CurrentUser() user: JwtPayloadUser) {
-    return this.service.findAll(user.ecoleId, await this.perimetre.classesAutorisees(user));
+  async findAll(
+    @CurrentUser() user: JwtPayloadUser,
+    @Query('classeId') classeId?: string,
+    @Query('regime', new ParseEnumPipe(Regime, { optional: true })) regime?: Regime,
+  ) {
+    if (classeId) await this.perimetre.exigerClasse(user, classeId);
+    return this.service.findAll(user.ecoleId, await this.perimetre.classesAutorisees(user), {
+      classeId: classeId || undefined,
+      regime,
+    });
   }
 
   @Get('eleves/:id/fiche')
@@ -44,10 +53,18 @@ export class ElevesController {
     return this.service.update(user.ecoleId, id, dto);
   }
 
+  // Ce que la suppression définitive emportera (affiché avant de demander le code)
+  @Get('eleves/:id/suppression')
+  @Roles(...ROLES_GESTION)
+  apercuSuppression(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string) {
+    return this.service.apercuSuppression(user.ecoleId, id);
+  }
+
   @Delete('eleves/:id')
   @Roles(...ROLES_GESTION)
-  remove(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string) {
-    return this.service.remove(user.ecoleId, id);
+  // Le code de suppression voyage dans un en-tête pour ne pas rester dans les journaux d'accès.
+  remove(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string, @Headers('x-code-suppression') code?: string) {
+    return this.service.remove(user.ecoleId, id, code);
   }
 
   @Get('parents-tuteurs')
@@ -60,6 +77,13 @@ export class ElevesController {
   @Roles(...ROLES_GESTION)
   createParent(@CurrentUser() user: JwtPayloadUser, @Body() dto: CreateParentTuteurDto) {
     return this.service.createParent(user.ecoleId, dto);
+  }
+
+  // Filiation (père, mère) : créée, modifiée ou retirée depuis la fiche de l'élève.
+  @Put('eleves/:id/filiation')
+  @Roles(...ROLES_GESTION)
+  filiation(@CurrentUser() user: JwtPayloadUser, @Param('id') id: string, @Body() dto: FiliationDto) {
+    return this.service.majFiliation(user.ecoleId, id, dto);
   }
 
   @Post('eleves/:id/parents')

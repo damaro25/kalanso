@@ -1,19 +1,30 @@
 import axios from 'axios';
 import { apiClient } from './client';
+import type { Regime } from './finances';
+import { URL_API } from './urlApi';
 
 // Instance sans intercepteur d'auth : les endpoints publics ne doivent pas
 // rediriger un parent non connecté vers /login.
-const publicClient = axios.create({ baseURL: import.meta.env.VITE_API_URL });
+const publicClient = axios.create({ baseURL: URL_API });
 
 export type StatutDemande = 'EN_ATTENTE' | 'ACCEPTEE' | 'REFUSEE';
 
-export type TypeDocument = 'PHOTO' | 'ATTESTATION' | 'RELEVE_NOTES' | 'EXTRAIT_NAISSANCE' | 'AUTRE';
+export type TypeDocument =
+  | 'PHOTO'
+  | 'ATTESTATION'
+  | 'RELEVE_NOTES'
+  | 'EXTRAIT_NAISSANCE'
+  | 'CARNET_VACCINATION'
+  | 'LIVRET_SCOLAIRE'
+  | 'AUTRE';
 export type StatutDocument = 'EN_ATTENTE' | 'VERIFIE' | 'REJETE';
 
 export const TYPES_DOCUMENT: { value: TypeDocument; label: string }[] = [
   { value: 'PHOTO', label: 'Photo' },
   { value: 'RELEVE_NOTES', label: 'Relevé de notes' },
   { value: 'EXTRAIT_NAISSANCE', label: 'Extrait de naissance' },
+  { value: 'CARNET_VACCINATION', label: 'Carnet de vaccination' },
+  { value: 'LIVRET_SCOLAIRE', label: 'Livret scolaire' },
   { value: 'ATTESTATION', label: 'Attestation' },
   { value: 'AUTRE', label: 'Autre' },
 ];
@@ -95,7 +106,7 @@ export async function uploaderDocument(demandeId: string, type: TypeDocument, fi
 
 // ---- Direction ----
 export function urlTelechargementDocument(documentId: string): string {
-  return `${import.meta.env.VITE_API_URL}/admissions/documents/${documentId}/telecharger`;
+  return `${URL_API}/admissions/documents/${documentId}/telecharger`;
 }
 
 // Aperçu dans un nouvel onglet (images, PDF...). Le blob conserve son type MIME.
@@ -128,7 +139,7 @@ export async function fetchDemandes(statut?: StatutDemande): Promise<DemandeInsc
   return data;
 }
 
-export async function accepterDemande(id: string, payload: { classeId: string; matricule?: string }) {
+export async function accepterDemande(id: string, payload: { classeId: string; matricule?: string; regime?: Regime }) {
   const { data } = await apiClient.post(`/admissions/${id}/accepter`, payload);
   return data;
 }
@@ -180,10 +191,19 @@ export interface InscriptionDirecteInput {
   prenomParent: string;
   telephoneParent: string;
   emailParent?: string;
+  // Filiation facultative
+  perePrenom?: string;
+  pereNom?: string;
+  pereTelephone?: string;
+  pereProfession?: string;
+  merePrenom?: string;
+  mereNom?: string;
+  mereTelephone?: string;
+  mereProfession?: string;
 }
 
-// Secrétariat : élève reçu directement au bureau. Crée une demande EN_ATTENTE,
-// exactement comme le formulaire public — l'élève n'est créé qu'à l'acceptation.
+// Secrétariat : élève reçu directement au bureau. Crée la demande d'admission (EN_ATTENTE, pour y joindre
+// les pièces) ; l'écran d'inscription sur place l'accepte aussitôt dans la classe choisie.
 export async function inscrireSurPlace(input: InscriptionDirecteInput): Promise<DemandeInscription> {
   const { data } = await apiClient.post('/admissions/inscription-directe', input);
   return data;

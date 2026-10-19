@@ -47,7 +47,7 @@ describe("Accès de l'enseignant : routes", () => {
 
     it('la liste est filtrée sur ses classes', async () => {
       await controleur.findAll(enseignant);
-      expect(service.findAll).toHaveBeenCalledWith('ecole', ['c1', 'c2']);
+      expect(service.findAll).toHaveBeenCalledWith('ecole', ['c1', 'c2'], { classeId: undefined, regime: undefined });
     });
 
     it('la fiche exige que l\'élève soit dans ses classes, et renvoie la version restreinte', async () => {
@@ -55,6 +55,12 @@ describe("Accès de l'enseignant : routes", () => {
       expect(p.exigerEleve).toHaveBeenCalledWith(enseignant, 'e1');
       expect(service.ficheRestreinte).toHaveBeenCalledWith('ecole', 'e1');
       expect(service.fiche).not.toHaveBeenCalled();
+    });
+
+    it("filtrer sur une classe exige qu'elle fasse partie de ses classes", async () => {
+      p.exigerClasse.mockRejectedValue(refus());
+      await expect(controleur.findAll(enseignant, 'c9')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(service.findAll).not.toHaveBeenCalled();
     });
 
     it("la fiche d'un élève d'une autre classe est refusée avant toute lecture", async () => {
@@ -69,7 +75,7 @@ describe("Accès de l'enseignant : routes", () => {
       const c = new ElevesController(service as never, libre as never);
       await c.findAll(direction);
       await c.fiche(direction, 'e1');
-      expect(service.findAll).toHaveBeenCalledWith('ecole', null);
+      expect(service.findAll).toHaveBeenCalledWith('ecole', null, { classeId: undefined, regime: undefined });
       expect(service.fiche).toHaveBeenCalledWith('ecole', 'e1');
       expect(service.ficheRestreinte).not.toHaveBeenCalled();
     });
@@ -233,7 +239,7 @@ describe("Accès de l'enseignant : services", () => {
 
   describe('ElevesService', () => {
     it("findAll ne retourne que les élèves inscrits dans ses classes, sans adresse", async () => {
-      prisma.eleve.findMany.mockResolvedValue([{ id: 'e1', nom: 'A', adresse: 'Rue 1', matricule: 'M1' }]);
+      prisma.eleve.findMany.mockResolvedValue([{ id: 'e1', nom: 'A', adresse: 'Rue 1', matricule: 'M1', inscriptions: [] }]);
       const eleves = await new ElevesService(prisma, {} as never).findAll('ecole', ['c1']);
 
       expect(prisma.eleve.findMany.mock.calls[0][0].where).toEqual({
@@ -241,14 +247,14 @@ describe("Accès de l'enseignant : services", () => {
         actif: true,
         inscriptions: { some: { statut: 'EN_COURS', classeId: { in: ['c1'] } } },
       });
-      expect(eleves).toEqual([{ id: 'e1', nom: 'A', matricule: 'M1' }]);
+      expect(eleves).toEqual([{ id: 'e1', nom: 'A', matricule: 'M1', regime: null, classe: null }]);
     });
 
     it('findAll sans restriction renvoie tout, adresse comprise', async () => {
-      prisma.eleve.findMany.mockResolvedValue([{ id: 'e1', adresse: 'Rue 1' }]);
+      prisma.eleve.findMany.mockResolvedValue([{ id: 'e1', adresse: 'Rue 1', inscriptions: [] }]);
       const eleves = await new ElevesService(prisma, {} as never).findAll('ecole');
       expect(prisma.eleve.findMany.mock.calls[0][0].where).toEqual({ ecoleId: 'ecole', actif: true });
-      expect(eleves).toEqual([{ id: 'e1', adresse: 'Rue 1' }]);
+      expect(eleves).toEqual([{ id: 'e1', adresse: 'Rue 1', regime: null, classe: null }]);
     });
 
     it("la fiche restreinte n'expose ni factures, ni solde, ni parents, ni adresse, ni admission", async () => {

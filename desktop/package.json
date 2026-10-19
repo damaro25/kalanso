@@ -1,0 +1,56 @@
+{
+  "name": "mame-ta-desktop",
+  "productName": "Mamé-TA Gestion scolaire",
+  "version": "1.3.11",
+  "description": "Gestion scolaire Mamé-TA : version bureau (Windows) avec base de données SQLite intégrée",
+  "author": "Les Écoles Mamé-TA",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "preparer": "node scripts/preparer.mjs",
+    "demarrer": "electron .",
+    "installateur": "node scripts/preparer.mjs && electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "gn.mameta.gestion",
+    "productName": "Mamé-TA Gestion scolaire",
+    "directories": {
+      "output": "sortie"
+    },
+    "files": [
+      "main.js",
+      "lib/**/*",
+      "icone.png",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/backend",
+        "to": "backend"
+      },
+      {
+        "from": "build/frontend",
+        "to": "frontend"
+      }
+    ],
+    "asar": false,
+    "afterPack": "scripts/apres-empaquetage.js",
+    "win": {
+      "target": "nsis",
+      "icon": "icone.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Mamé-TA Gestion scolaire",
+      "deleteAppDataOnUninstall": false
+    }
+  },
+  "devDependencies": {
+    "electron": "38.8.6",
+    "electron-builder": "26.15.3"
+  }
+}

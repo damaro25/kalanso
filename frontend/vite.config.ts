@@ -4,6 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Accessible depuis les autres appareils du réseau local (http://<IP du PC>:5173), pas seulement localhost
+  server: { host: true, port: 5173 },
+  preview: { host: true },
   plugins: [
     react(),
     VitePWA({

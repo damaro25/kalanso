@@ -32,6 +32,15 @@ enum StatutInscription {
   TRANSFEREE
 }
 
+// Régime de l'élève pour une année scolaire : détermine les tarifs d'écolage qui lui sont facturés
+// (un tarif sans régime s'applique à tous les régimes de son niveau).
+enum Regime {
+  EXTERNAT
+  SEMI_INTERNAT
+  INTERNAT
+  PENSIONNAT
+}
+
 enum StatutAbsence {
   PRESENT
   ABSENT
@@ -49,6 +58,8 @@ enum TypeFacture {
   ECOLAGE
   INSCRIPTION
   AUTRE
+  FORMATION // formation supplémentaire (arabe, anglais, informatique...), facturée au mois
+  ASSURANCE // assurance scolaire annuelle, une par élève et par année
 }
 
 enum ModePaiement {
@@ -103,6 +114,8 @@ enum TypeDocument {
   ATTESTATION
   RELEVE_NOTES
   EXTRAIT_NAISSANCE
+  CARNET_VACCINATION
+  LIVRET_SCOLAIRE
   AUTRE
 }
 
@@ -152,44 +165,58 @@ enum EtatMateriel {
 // ─────────────────────────────────────────────
 
 model Ecole {
-  id        String   @id @default(cuid())
-  nom       String
-  sigle     String?
-  ville     String?
-  telephone String?
-  email     String?
-  logoUrl   String?
-  actif     Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                     String   @id @default(cuid())
+  nom                    String
+  sigle                  String?
+  ville                  String?
+  telephone              String?
+  email                  String?
+  logoUrl                String?
+  // Signataires du bordereau journalier
+  nomDirecteur           String?
+  nomComptable           String?
+  // Premier N° de reçu à attribuer (pour continuer la numérotation du carnet papier)
+  numeroRecuDepart       Int?
+  // En-tête et signataire des cartes de retrait (maternelle) ; vides : valeurs par défaut
+  carteRetraitMinistere  String?
+  carteRetraitDev        String?
+  carteRetraitDce        String?
+  carteRetraitSignataire String?
+  actif                  Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  utilisateurs    Utilisateur[]
-  anneesScolaires AnneeScolaire[]
-  niveaux         Niveau[]
-  classes         Classe[]
-  personnels      Personnel[]
-  eleves          Eleve[]
-  parentsTuteurs  ParentTuteur[]
-  inscriptions    Inscription[]
-  absences        Absence[]
-  tarifsEcolage   TarifEcolage[]
-  fraisInscriptionNiveau FraisInscriptionNiveau[]
-  factures        Facture[]
-  paiements       Paiement[]
-  matieres        Matiere[]
-  notes           Note[]
-  creneaux        Creneau[]
-  salles          Salle[]
-  messagesParents MessageParent[]
-  transactionsMM  TransactionMobileMoney[]
-  demandesInscription DemandeInscription[]
-  bulletinsPaie   BulletinPaie[]
-  materiels       Materiel[]
-  mouvements      MouvementFinancier[]
-  livres          Livre[]
-  emprunts        Emprunt[]
-  annulationsAdmission AnnulationAdmission[]
-  affectationsEnseignants AffectationEnseignant[]
+  utilisateurs              Utilisateur[]
+  anneesScolaires           AnneeScolaire[]
+  niveaux                   Niveau[]
+  classes                   Classe[]
+  personnels                Personnel[]
+  eleves                    Eleve[]
+  parentsTuteurs            ParentTuteur[]
+  inscriptions              Inscription[]
+  absences                  Absence[]
+  tarifsEcolage             TarifEcolage[]
+  fraisInscriptionNiveau    FraisInscriptionNiveau[]
+  factures                  Facture[]
+  paiements                 Paiement[]
+  budgetDepenses            BudgetDepense[]
+  formationsSupplementaires FormationSupplementaire[]
+  inscriptionsFormations    InscriptionFormation[]
+  tarifsAssurance           TarifAssurance[]
+  matieres                  Matiere[]
+  notes                     Note[]
+  creneaux                  Creneau[]
+  salles                    Salle[]
+  messagesParents           MessageParent[]
+  transactionsMM            TransactionMobileMoney[]
+  demandesInscription       DemandeInscription[]
+  bulletinsPaie             BulletinPaie[]
+  materiels                 Materiel[]
+  mouvements                MouvementFinancier[]
+  livres                    Livre[]
+  emprunts                  Emprunt[]
+  annulationsAdmission      AnnulationAdmission[]
+  affectationsEnseignants   AffectationEnseignant[]
 
   @@map("ecoles")
 }
@@ -223,19 +250,27 @@ model Utilisateur {
 // ─────────────────────────────────────────────
 
 model AnneeScolaire {
-  id        String   @id @default(cuid())
-  ecoleId   String
-  ecole     Ecole    @relation(fields: [ecoleId], references: [id])
-  libelle   String
-  dateDebut DateTime
-  dateFin   DateTime
-  courante  Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id            String    @id @default(cuid())
+  ecoleId       String
+  ecole         Ecole     @relation(fields: [ecoleId], references: [id])
+  libelle       String
+  dateDebut     DateTime
+  dateFin       DateTime
+  courante      Boolean   @default(false)
+  // Clôture (Finances > Clôture d'année) : plus de factures ni de tarifs pour cette année, les paiements
+  // d'arriérés restent possibles. Résumé de ce que la clôture a créé dans l'année suivante.
+  cloturee      Boolean   @default(false)
+  clotureLe     DateTime?
+  clotureParId  String?
+  clotureResume Json?
+  createdAt     DateTime  @default(now())
 
-  classes      Classe[]
-  inscriptions Inscription[]
-  absences     Absence[]
-  factures     Facture[]
+  classes                Classe[]
+  inscriptions           Inscription[]
+  absences               Absence[]
+  factures               Facture[]
+  budgetDepenses         BudgetDepense[]
+  inscriptionsFormations InscriptionFormation[]
 
   @@unique([ecoleId, libelle])
   @@index([ecoleId])
@@ -250,11 +285,11 @@ model Niveau {
   cycle   String?
   ordre   Int     @default(0)
 
-  classes                 Classe[]
-  tarifsEcolage           TarifEcolage[]
-  fraisInscriptionNiveau  FraisInscriptionNiveau[]
-  matieres                Matiere[]
-  demandesInscription     DemandeInscription[]
+  classes                Classe[]
+  tarifsEcolage          TarifEcolage[]
+  fraisInscriptionNiveau FraisInscriptionNiveau[]
+  matieres               Matiere[]
+  demandesInscription    DemandeInscription[]
 
   @@unique([ecoleId, nom])
   @@index([ecoleId])
@@ -314,9 +349,9 @@ model Classe {
 // ─────────────────────────────────────────────
 
 model Personnel {
-  id           String    @id @default(cuid())
+  id           String        @id @default(cuid())
   ecoleId      String
-  ecole        Ecole     @relation(fields: [ecoleId], references: [id])
+  ecole        Ecole         @relation(fields: [ecoleId], references: [id])
   matricule    String?
   nom          String
   prenom       String
@@ -326,10 +361,10 @@ model Personnel {
   fonction     String
   type         TypePersonnel @default(ADMINISTRATIF)
   dateEmbauche DateTime?
-  salaireBase  Decimal?  @db.Decimal(12, 2)
-  actif        Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  salaireBase  Decimal?      @db.Decimal(12, 2)
+  actif        Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   utilisateur   Utilisateur?
   creneaux      Creneau[]
@@ -361,14 +396,15 @@ model Eleve {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  inscriptions Inscription[]
-  absences     Absence[]
-  factures     Facture[]
-  parentsLiens EleveParent[]
-  notes        Note[]
-  messages     MessageParent[]
-  demandesInscription DemandeInscription[]
-  emprunts     Emprunt[]
+  inscriptions           Inscription[]
+  absences               Absence[]
+  factures               Facture[]
+  parentsLiens           EleveParent[]
+  notes                  Note[]
+  messages               MessageParent[]
+  demandesInscription    DemandeInscription[]
+  emprunts               Emprunt[]
+  inscriptionsFormations InscriptionFormation[]
 
   @@unique([ecoleId, matricule])
   @@index([ecoleId])
@@ -419,6 +455,7 @@ model Inscription {
   anneeScolaire   AnneeScolaire     @relation(fields: [anneeScolaireId], references: [id])
   dateInscription DateTime          @default(now())
   statut          StatutInscription @default(EN_COURS)
+  regime          Regime            @default(EXTERNAT)
 
   @@unique([eleveId, anneeScolaireId])
   @@index([ecoleId])
@@ -457,15 +494,19 @@ model Absence {
 // ─────────────────────────────────────────────
 
 model TarifEcolage {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   ecoleId         String
-  ecole           Ecole    @relation(fields: [ecoleId], references: [id])
+  ecole           Ecole     @relation(fields: [ecoleId], references: [id])
   niveauId        String
-  niveau          Niveau   @relation(fields: [niveauId], references: [id])
+  niveau          Niveau    @relation(fields: [niveauId], references: [id])
   anneeScolaireId String
   libelle         String
-  montant         Decimal  @db.Decimal(12, 2)
-  createdAt       DateTime @default(now())
+  montant         Decimal   @db.Decimal(12, 2)
+  // Null : le tarif s'applique à tous les régimes du niveau (ex. crèche/garderie).
+  regime          Regime?
+  // Reportée sur la facture générée (ex. tranche 2 au 6 janvier).
+  dateEcheance    DateTime?
+  createdAt       DateTime  @default(now())
 
   @@unique([ecoleId, niveauId, anneeScolaireId, libelle])
   @@index([ecoleId])
@@ -473,25 +514,30 @@ model TarifEcolage {
 }
 
 model Facture {
-  id              String        @id @default(cuid())
+  id              String                   @id @default(cuid())
   ecoleId         String
-  ecole           Ecole         @relation(fields: [ecoleId], references: [id])
+  ecole           Ecole                    @relation(fields: [ecoleId], references: [id])
   eleveId         String
-  eleve           Eleve         @relation(fields: [eleveId], references: [id])
+  eleve           Eleve                    @relation(fields: [eleveId], references: [id])
   anneeScolaireId String
-  anneeScolaire   AnneeScolaire @relation(fields: [anneeScolaireId], references: [id])
+  anneeScolaire   AnneeScolaire            @relation(fields: [anneeScolaireId], references: [id])
   libelle         String
-  type            TypeFacture   @default(ECOLAGE)
-  montantTotal    Decimal       @db.Decimal(12, 2)
-  montantPaye     Decimal       @default(0) @db.Decimal(12, 2)
-  statut          StatutFacture @default(IMPAYEE)
+  type            TypeFacture              @default(ECOLAGE)
+  montantTotal    Decimal                  @db.Decimal(12, 2)
+  montantPaye     Decimal                  @default(0) @db.Decimal(12, 2)
+  statut          StatutFacture            @default(IMPAYEE)
   dateEcheance    DateTime?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  // Facture d'une formation supplémentaire : la formation et le mois facturé (AAAA-MM), un seul par élève
+  formationId     String?
+  formation       FormationSupplementaire? @relation(fields: [formationId], references: [id])
+  moisFormation   String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
 
   paiements      Paiement[]
   transactionsMM TransactionMobileMoney[]
 
+  @@unique([eleveId, formationId, moisFormation])
   @@index([ecoleId])
   @@index([eleveId])
   @@index([statut])
@@ -504,6 +550,8 @@ model Paiement {
   ecole        Ecole        @relation(fields: [ecoleId], references: [id])
   factureId    String
   facture      Facture      @relation(fields: [factureId], references: [id])
+  // N° de reçu séquentiel par école (001480...), attribué par la base à l'insertion (trigger)
+  numero       Int?
   montant      Decimal      @db.Decimal(12, 2)
   mode         ModePaiement @default(ESPECES)
   reference    String?
@@ -513,27 +561,28 @@ model Paiement {
 
   transactionMM TransactionMobileMoney?
 
+  @@unique([ecoleId, numero])
   @@index([ecoleId])
   @@index([factureId])
   @@map("paiements")
 }
 
 model TransactionMobileMoney {
-  id          String               @id @default(cuid())
-  ecoleId     String
-  ecole       Ecole                @relation(fields: [ecoleId], references: [id])
-  factureId   String
-  facture     Facture              @relation(fields: [factureId], references: [id])
-  paiementId  String?              @unique
-  paiement    Paiement?            @relation(fields: [paiementId], references: [id])
-  operateur   OperateurMobileMoney
-  telephone   String
-  montant     Decimal              @db.Decimal(12, 2)
-  statut      StatutTransaction    @default(EN_ATTENTE)
-  reference   String               @unique
+  id           String               @id @default(cuid())
+  ecoleId      String
+  ecole        Ecole                @relation(fields: [ecoleId], references: [id])
+  factureId    String
+  facture      Facture              @relation(fields: [factureId], references: [id])
+  paiementId   String?              @unique
+  paiement     Paiement?            @relation(fields: [paiementId], references: [id])
+  operateur    OperateurMobileMoney
+  telephone    String
+  montant      Decimal              @db.Decimal(12, 2)
+  statut       StatutTransaction    @default(EN_ATTENTE)
+  reference    String               @unique
   initieeParId String?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
 
   @@index([ecoleId, createdAt])
   @@index([factureId])
@@ -589,13 +638,13 @@ model Note {
 // ─────────────────────────────────────────────
 
 model Salle {
-  id       String  @id @default(cuid())
+  id       String @id @default(cuid())
   ecoleId  String
-  ecole    Ecole   @relation(fields: [ecoleId], references: [id])
+  ecole    Ecole  @relation(fields: [ecoleId], references: [id])
   nom      String
   capacite Int?
 
-  creneaux Creneau[]
+  creneaux  Creneau[]
   materiels Materiel[]
 
   @@unique([ecoleId, nom])
@@ -694,6 +743,15 @@ model DemandeInscription {
   prenomParent    String
   telephoneParent String
   emailParent     String?
+  // Filiation (facultative) : père et mère, reportés sur l'élève à l'acceptation
+  perePrenom      String?
+  pereNom         String?
+  pereTelephone   String?
+  pereProfession  String?
+  merePrenom      String?
+  mereNom         String?
+  mereTelephone   String?
+  mereProfession  String?
   // Pièces justificatives (description ; upload de fichiers différé)
   piecesJointes   String?
   // Traitement
@@ -705,8 +763,8 @@ model DemandeInscription {
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
 
-  documents       DocumentDemande[]
-  annulations     AnnulationAdmission[]
+  documents   DocumentDemande[]
+  annulations AnnulationAdmission[]
 
   @@index([ecoleId, statut])
   @@map("demandes_inscription")
@@ -721,17 +779,17 @@ enum TypeAnnulation {
 // données peuvent être définitivement supprimés par l'action elle-même, cette
 // ligne est la seule preuve qui subsiste que la décision a été reprise.
 model AnnulationAdmission {
-  id           String              @id @default(cuid())
+  id           String             @id @default(cuid())
   ecoleId      String
-  ecole        Ecole               @relation(fields: [ecoleId], references: [id])
+  ecole        Ecole              @relation(fields: [ecoleId], references: [id])
   demandeId    String
-  demande      DemandeInscription  @relation(fields: [demandeId], references: [id])
+  demande      DemandeInscription @relation(fields: [demandeId], references: [id])
   type         TypeAnnulation
   nomEleve     String
   prenomEleve  String
   detail       String?
   annuleeParId String?
-  createdAt    DateTime            @default(now())
+  createdAt    DateTime           @default(now())
 
   @@index([ecoleId, createdAt])
   @@map("annulations_admission")
@@ -884,4 +942,157 @@ model Emprunt {
   @@index([livreId])
   @@index([eleveId])
   @@map("emprunts")
+}
+
+// Poste du budget des décaissements (page « Budget de trésorerie ») : montants prévus d'octobre à juin,
+// puis un dernier pour les vacances (juillet à septembre).
+model BudgetDepense {
+  id              String        @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole         @relation(fields: [ecoleId], references: [id])
+  anneeScolaireId String
+  anneeScolaire   AnneeScolaire @relation(fields: [anneeScolaireId], references: [id])
+  poste           String
+  ordre           Int           @default(0)
+  montants        Decimal[]     @db.Decimal(14, 2)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([ecoleId, anneeScolaireId])
+  @@map("budget_depenses")
+}
+
+// Formation supplémentaire proposée par l'école (arabe, anglais, informatique...), payée au mois.
+// Gratuite pour les élèves dont le régime figure dans « regimesGratuits ».
+model FormationSupplementaire {
+  id              String   @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole    @relation(fields: [ecoleId], references: [id])
+  nom             String
+  tarifMensuel    Int      @default(0) // GNF
+  regimesGratuits Regime[]
+  actif           Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  inscriptions InscriptionFormation[]
+  factures     Facture[]
+
+  @@unique([ecoleId, nom])
+  @@map("formations_supplementaires")
+}
+
+// Inscription d'un élève à une formation pour une année scolaire ; « dateFin » renseignée : désinscrit.
+model InscriptionFormation {
+  id              String                  @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole                   @relation(fields: [ecoleId], references: [id])
+  eleveId         String
+  eleve           Eleve                   @relation(fields: [eleveId], references: [id])
+  formationId     String
+  formation       FormationSupplementaire @relation(fields: [formationId], references: [id])
+  anneeScolaireId String
+  anneeScolaire   AnneeScolaire           @relation(fields: [anneeScolaireId], references: [id])
+  dateDebut       DateTime                @default(now())
+  dateFin         DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@unique([eleveId, formationId, anneeScolaireId])
+  @@index([ecoleId, anneeScolaireId])
+  @@map("inscriptions_formations")
+}
+
+// Montant de l'assurance scolaire annuelle d'une année (Établissement > Configuration) : un montant pour tous
+// (cycle vide) et, au besoin, un montant propre à un cycle (Maternelle, Primaire...).
+model TarifAssurance {
+  id              String   @id @default(cuid())
+  ecoleId         String
+  ecole           Ecole    @relation(fields: [ecoleId], references: [id])
+  anneeScolaireId String
+  cycle           String   @default("") // "" : tous les cycles
+  montant         Int // GNF
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([ecoleId, anneeScolaireId, cycle])
+  @@map("tarifs_assurance")
+}
+
+// ─────────────────────────────────────────────
+// SYNCHRONISATION version bureau ↔ serveur
+// ─────────────────────────────────────────────
+
+// État de chaque ligne vue par la synchronisation (sur le serveur comme sur chaque PC) : empreinte du contenu,
+// version (compteur croissant) à chaque changement, suppression. `origine` : « local » (PC), « serveur » (web)
+// ou code du poste qui a envoyé le changement (B1, B2...).
+model SyncEtat {
+  id        String   @id @default(cuid())
+  modele    String
+  ligneId   String
+  empreinte String
+  version   Int
+  supprime  Boolean  @default(false)
+  origine   String
+  modifieLe DateTime
+
+  @@unique([modele, ligneId])
+  @@index([version])
+  @@map("sync_etats")
+}
+
+// Versions écartées lors d'un conflit (la dernière modification gagne) : consultables, rien n'est perdu.
+model SyncHistorique {
+  id        String   @id @default(cuid())
+  modele    String
+  ligneId   String
+  donnees   Json?
+  modifieLe DateTime
+  poste     String?
+  raison    String
+  createdAt DateTime @default(now())
+
+  @@index([modele, ligneId])
+  @@map("sync_historique")
+}
+
+// Postes (PC bureau) enregistrés auprès du serveur : B1, B2... ; le numéro sert aussi de série aux reçus.
+model SyncPoste {
+  id             String    @id @default(cuid())
+  ecoleId        String
+  code           String
+  numero         Int
+  nom            String?
+  derniereSyncLe DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([ecoleId, code])
+  @@unique([ecoleId, numero])
+  @@map("sync_postes")
+}
+
+// Réglages de synchronisation d'un PC bureau (une seule ligne, id « local ») ; mot de passe chiffré.
+model SyncConfig {
+  id                  String    @id
+  urlServeur          String?
+  email               String?
+  motDePasseChiffre   String?
+  poste               String?
+  posteNumero         Int?
+  actif               Boolean   @default(false)
+  initialise          Boolean   @default(false)
+  curseurServeur      Int       @default(0)
+  versionEnvoyee      Int       @default(0)
+  derniereSyncLe      DateTime?
+  dernierEtat         String?
+  // Base PostgreSQL du serveur (facultatif) : identifiants pour la tester depuis ce PC ; la synchronisation
+  // elle-même passe par l'API du serveur.
+  bdHote              String?
+  bdPort              Int?
+  bdNom               String?
+  bdUtilisateur       String?
+  bdMotDePasseChiffre String?
+  updatedAt           DateTime  @updatedAt
+
+  @@map("sync_config")
 }

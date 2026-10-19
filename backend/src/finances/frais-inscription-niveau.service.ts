@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFraisInscriptionNiveauDto, UpdateFraisInscriptionNiveauDto } from './dto/frais-inscription-niveau.dto';
+import { exigerAnneeOuverte } from '../common/annee-cloturee.util';
 
 @Injectable()
 export class FraisInscriptionNiveauService {
@@ -36,6 +37,7 @@ export class FraisInscriptionNiveauService {
 
   async create(ecoleId: string, dto: CreateFraisInscriptionNiveauDto) {
     await this.verifierReferences(ecoleId, dto.niveauId, dto.anneeScolaireId);
+    await exigerAnneeOuverte(this.prisma, dto.anneeScolaireId, "modifier ses frais d'inscription");
     const existant = await this.prisma.fraisInscriptionNiveau.findFirst({
       where: { ecoleId, niveauId: dto.niveauId, anneeScolaireId: dto.anneeScolaireId },
     });
@@ -56,6 +58,8 @@ export class FraisInscriptionNiveauService {
 
   async update(ecoleId: string, id: string, dto: UpdateFraisInscriptionNiveauDto) {
     const actuel = await this.prisma.fraisInscriptionNiveau.findFirstOrThrow({ where: { id, ecoleId } });
+    await exigerAnneeOuverte(this.prisma, actuel.anneeScolaireId, "modifier ses frais d'inscription");
+    await exigerAnneeOuverte(this.prisma, dto.anneeScolaireId, "modifier ses frais d'inscription");
 
     if (dto.anneeScolaireId && dto.anneeScolaireId !== actuel.anneeScolaireId) {
       await this.verifierReferences(ecoleId, undefined, dto.anneeScolaireId);

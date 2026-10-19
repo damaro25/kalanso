@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { SyncModule } from './sync/sync.module';
 import { AuthModule } from './auth/auth.module';
 import { EcolesModule } from './ecoles/ecoles.module';
 import { ElevesModule } from './eleves/eleves.module';
@@ -21,10 +22,12 @@ import { BibliothequeModule } from './bibliotheque/bibliotheque.module';
 import { ParcoursModule } from './parcours/parcours.module';
 import { CartesScolairesModule } from './cartes-scolaires/cartes-scolaires.module';
 import { PerimetreModule } from './common/perimetre/perimetre.module';
+import { ConfigurationModule } from './configuration/configuration.module';
 
 @Module({
   imports: [
     PrismaModule,
+    SyncModule,
     PerimetreModule,
     AuthModule,
     EcolesModule,
@@ -44,6 +47,7 @@ import { PerimetreModule } from './common/perimetre/perimetre.module';
     ParcoursModule,
     CartesScolairesModule,
     ReportingModule,
+    ConfigurationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

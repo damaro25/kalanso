@@ -19,6 +19,7 @@ import { initierTransaction, confirmerTransaction, echecTransaction, OPERATEURS,
 import { fetchClassesCourantes, fetchClasseEleves } from '../../api/classes';
 import { correspond } from '../../lib/search';
 import { usePendingIds } from '../../offline/outbox';
+import { facturerFormations, moisCourant, resumeFacturation } from '../../api/formations';
 
 const STATUT_COLORS: Record<string, string> = {
   IMPAYEE: 'red',
@@ -26,6 +27,14 @@ const STATUT_COLORS: Record<string, string> = {
   PAYEE: 'green',
   ANNULEE: 'gray',
 };
+
+const TYPES_FACTURE = [
+  { value: 'ECOLAGE', label: 'Écolage' },
+  { value: 'INSCRIPTION', label: 'Inscription' },
+  { value: 'ASSURANCE', label: 'T-shirt' },
+  { value: 'AUTRE', label: 'Autres frais' },
+  { value: 'FORMATION', label: 'Formations supplémentaires' },
+];
 
 export function FacturesListPage() {
   const queryClient = useQueryClient();
@@ -45,13 +54,20 @@ export function FacturesListPage() {
     [elevesClasse],
   );
 
+  const [typeFacture, setTypeFacture] = useState<string | null>(null);
+  const [portee, setPortee] = useState<'TOUTES' | 'COURANTE' | 'ARRIERES'>('TOUTES');
   const facturesFiltrees = useMemo(
     () =>
       (factures ?? [])
         .filter((f) => correspond([f.eleve.nom, f.eleve.prenom, f.libelle], recherche))
-        .filter((f) => !eleveIdsClasse || eleveIdsClasse.has(f.eleve.id)),
-    [factures, recherche, eleveIdsClasse],
+        .filter((f) => !eleveIdsClasse || eleveIdsClasse.has(f.eleve.id))
+        .filter((f) => !typeFacture || f.type === typeFacture)
+        .filter((f) => portee === 'TOUTES' || (portee === 'ARRIERES' ? f.arriere : !f.arriere)),
+    [factures, recherche, eleveIdsClasse, typeFacture, portee],
   );
+  const resteDe = (liste: typeof facturesFiltrees) => liste.reduce((t, f) => t + Number(f.montantTotal) - Number(f.montantPaye), 0);
+  const resteTotal = resteDe(facturesFiltrees);
+  const resteArrieres = resteDe(facturesFiltrees.filter((f) => f.arriere));
 
   const [factureId, setFactureId] = useState<string | null>(null);
   const [montant, setMontant] = useState<number | ''>('');
@@ -64,6 +80,17 @@ export function FacturesListPage() {
   const [telephoneMM, setTelephoneMM] = useState('');
   const [montantMM, setMontantMM] = useState<number | ''>('');
   const [transactionEnCours, setTransactionEnCours] = useState<{ id: string; reference: string } | null>(null);
+
+  // Formations supplémentaires : facture du mois pour tous les inscrits
+  const [moisFormations, setMoisFormations] = useState(moisCourant());
+  const facturerMutation = useMutation({
+    mutationFn: () => facturerFormations(moisFormations),
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ['factures-impayes'] });
+      notifications.show({ message: resumeFacturation(r), color: r.creees ? 'green' : 'blue' });
+    },
+    onError: (e: any) => notifications.show({ message: e?.response?.data?.message ?? 'Erreur lors de la facturation', color: 'red' }),
+  });
 
   const rappelMutation = useMutation({
     mutationFn: (id: string) => envoyerRappelImpaye(id),
@@ -82,7 +109,7 @@ export function FacturesListPage() {
       setDernierPaiementId(paiement.id);
       setMontant('');
     },
-    onError: () => notifications.show({ message: "Erreur lors de l'enregistrement du paiement", color: 'red' }),
+    onError: (e: any) => notifications.show({ message: e?.response?.data?.message ?? "Erreur lors de l'enregistrement du paiement", color: 'red' }),
   });
 
   function ouvrirModalMM(f: Facture) {
@@ -161,8 +188,25 @@ export function FacturesListPage() {
     <Stack>
       <div>
         <Title order={2}>Factures impayées</Title>
-        <Text c="dimmed" size="sm">Année scolaire courante</Text>
+        <Text c="dimmed" size="sm">
+          Toutes les factures non soldées (écolage, inscription, T-shirt et autres frais, formations supplémentaires),
+          arriérés des années précédentes compris
+        </Text>
       </div>
+
+      <Group align="flex-end" gap="sm">
+        <TextInput
+          type="month"
+          label="Formations supplémentaires"
+          description="Facture le mois à tous les élèves inscrits (sans doublon, rien pour les gratuits)"
+          value={moisFormations}
+          onChange={(e) => setMoisFormations(e.currentTarget.value)}
+          w={{ base: '100%', sm: 360 }}
+        />
+        <Button variant="light" disabled={!moisFormations} loading={facturerMutation.isPending} onClick={() => facturerMutation.mutate()}>
+          Facturer le mois
+        </Button>
+      </Group>
 
       <Group>
         <TextInput
@@ -179,6 +223,25 @@ export function FacturesListPage() {
           onChange={setClasseId}
           clearable
           w={{ base: '100%', sm: 260 }}
+        />
+        <Select
+          data={[
+            { value: 'TOUTES', label: 'Toutes les années' },
+            { value: 'COURANTE', label: 'Année courante' },
+            { value: 'ARRIERES', label: 'Arriérés seulement' },
+          ]}
+          value={portee}
+          onChange={(v) => v && setPortee(v as typeof portee)}
+          allowDeselect={false}
+          w={{ base: '100%', sm: 190 }}
+        />
+        <Select
+          placeholder="Tous les types"
+          data={TYPES_FACTURE}
+          value={typeFacture}
+          onChange={setTypeFacture}
+          clearable
+          w={{ base: '100%', sm: 200 }}
         />
         <input ref={fileInputRef} type="file" accept=".xlsx" hidden onChange={onFichierChoisi} />
         <Button
@@ -213,6 +276,13 @@ export function FacturesListPage() {
       )}
 
       {factures && facturesFiltrees.length > 0 && (
+        <Text size="sm">
+          Reste à payer : <b>{resteTotal.toLocaleString('fr-FR')} GNF</b>
+          {resteArrieres > 0 && <> dont arriérés : <b>{resteArrieres.toLocaleString('fr-FR')} GNF</b></>}
+        </Text>
+      )}
+
+      {factures && facturesFiltrees.length > 0 && (
         <Table.ScrollContainer minWidth={620}>
           <Table striped highlightOnHover>
             <Table.Thead>
@@ -231,7 +301,14 @@ export function FacturesListPage() {
                   <Table.Td>
                     {f.eleve.prenom} {f.eleve.nom}
                   </Table.Td>
-                  <Table.Td>{f.libelle}</Table.Td>
+                  <Table.Td>
+                    {f.libelle}
+                    {f.arriere && (
+                      <Badge ml="xs" size="sm" color="orange" variant="light">
+                        Arriéré {f.anneeScolaire?.libelle}
+                      </Badge>
+                    )}
+                  </Table.Td>
                   <Table.Td>{Number(f.montantTotal).toLocaleString('fr-FR')} GNF</Table.Td>
                   <Table.Td>{Number(f.montantPaye).toLocaleString('fr-FR')} GNF</Table.Td>
                   <Table.Td>

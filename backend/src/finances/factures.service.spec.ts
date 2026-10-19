@@ -166,13 +166,30 @@ describe('FacturesService', () => {
       expect(facturesCreees().map((f: any) => f.libelle)).toEqual(['Trimestre 2']);
     });
 
-    it("les tarifs sont cherchés pour le niveau de la classe et l'année demandée", async () => {
+    it("les tarifs sont cherchés pour le niveau de la classe et l'année demandée, externat par défaut", async () => {
       await service.genererFacturesEnrolement('ecole', 'e1', 'c1', 'a9');
       expect(prisma.tarifEcolage.findMany.mock.calls[0][0].where).toEqual({
         ecoleId: 'ecole',
         niveauId: 'n5',
         anneeScolaireId: 'a9',
+        OR: [{ regime: null }, { regime: 'EXTERNAT' }],
       });
+    });
+
+    it("ne retient que les tarifs du régime de l'inscription de l'année (ou sans régime)", async () => {
+      prisma.inscription.findFirst.mockImplementation(async ({ where }: any) =>
+        where.anneeScolaireId === 'a1' ? { id: 'i1', regime: 'INTERNAT' } : null,
+      );
+      await service.genererFacturesEnrolement('ecole', 'e1', 'c1', 'a1');
+      expect(prisma.tarifEcolage.findMany.mock.calls[0][0].where.OR).toEqual([{ regime: null }, { regime: 'INTERNAT' }]);
+    });
+
+    it("reporte l'échéance du tarif sur la facture", async () => {
+      prisma.fraisInscriptionNiveau.findFirst.mockResolvedValue(null);
+      const echeance = new Date('2026-01-06');
+      prisma.tarifEcolage.findMany.mockResolvedValue([{ libelle: 'Tranche 2', montant: 400000, dateEcheance: echeance }]);
+      await service.genererFacturesEnrolement('ecole', 'e1', 'c1', 'a1');
+      expect(facturesCreees()[0].dateEcheance).toBe(echeance);
     });
   });
 
@@ -203,37 +220,79 @@ describe('FacturesService', () => {
   });
 
   describe('findImpayes', () => {
+    const COURANTE = { id: 'a2', libelle: '2026-2027', dateDebut: new Date('2026-10-05') };
     beforeEach(() => {
-      prisma.facture.findMany.mockResolvedValue([]);
+      prisma.anneeScolaire.findFirst.mockResolvedValue(COURANTE);
+      prisma.facture.findMany.mockResolvedValue([
+        { id: 'f1', anneeScolaire: { id: 'a1', libelle: '2025-2026', dateDebut: new Date('2025-10-01') } },
+        { id: 'f2', anneeScolaire: { id: 'a2', libelle: '2026-2027', dateDebut: new Date('2026-10-05') } },
+      ]);
     });
 
-    it("se limite aux impayés de l'année courante (même périmètre que le tableau de bord)", async () => {
-      prisma.anneeScolaire.findFirst.mockResolvedValueOnce({ id: 'a-courante' });
+    it('par défaut, toutes les années : les arriérés sont signalés avec leur année', async () => {
+      const r = await service.findImpayes('ecole');
+      expect(prisma.facture.findMany.mock.calls[0][0].where).toEqual({ ecoleId: 'ecole', statut: { in: ['IMPAYEE', 'PARTIELLE'] } });
+      expect(r.map((f: any) => [f.id, f.anneeScolaire.libelle, f.arriere])).toEqual([
+        ['f1', '2025-2026', true],
+        ['f2', '2026-2027', false],
+      ]);
+    });
 
-      await service.findImpayes('ecole');
-
-      expect(prisma.facture.findMany.mock.calls[0][0].where).toEqual({
-        ecoleId: 'ecole',
-        anneeScolaireId: 'a-courante',
-        statut: { in: ['IMPAYEE', 'PARTIELLE'] },
-      });
+    it("année courante seule, ou arriérés seuls (années antérieures)", async () => {
+      await service.findImpayes('ecole', 'COURANTE');
+      expect(prisma.facture.findMany.mock.calls[0][0].where).toMatchObject({ anneeScolaireId: 'a2' });
+      await service.findImpayes('ecole', 'ARRIERES');
+      expect(prisma.facture.findMany.mock.calls[1][0].where).toMatchObject({ anneeScolaire: { dateDebut: { lt: COURANTE.dateDebut } } });
     });
 
     it("à défaut d'année courante, retombe sur la plus récente", async () => {
-      prisma.anneeScolaire.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 'a-recente' });
-
-      await service.findImpayes('ecole');
-
+      prisma.anneeScolaire.findFirst.mockReset();
+      prisma.anneeScolaire.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(COURANTE);
+      await service.findImpayes('ecole', 'COURANTE');
       expect(prisma.anneeScolaire.findFirst.mock.calls[1][0].orderBy).toEqual({ dateDebut: 'desc' });
-      expect(prisma.facture.findMany.mock.calls[0][0].where.anneeScolaireId).toBe('a-recente');
+      expect(prisma.facture.findMany.mock.calls[0][0].where.anneeScolaireId).toBe('a2');
     });
 
-    it("trie par échéance croissante et inclut l'élève", async () => {
-      prisma.anneeScolaire.findFirst.mockResolvedValue({ id: 'a1' });
+    it("trie par année puis par échéance et inclut l'élève", async () => {
       await service.findImpayes('ecole');
       const arg = prisma.facture.findMany.mock.calls[0][0];
-      expect(arg.orderBy).toEqual({ dateEcheance: 'asc' });
-      expect(arg.include).toEqual({ eleve: true });
+      expect(arg.orderBy).toEqual([{ anneeScolaire: { dateDebut: 'asc' } }, { dateEcheance: 'asc' }]);
+      expect(arg.include.eleve).toBe(true);
+    });
+  });
+
+  describe('annulerEcolageRegime', () => {
+    beforeEach(() => {
+      prisma.tarifEcolage.findMany.mockResolvedValue([{ libelle: 'Internat - Tranche 1' }, { libelle: 'Internat - Tranche 2' }]);
+    });
+
+    it("annule les factures d'écolage impayées de l'ancien régime", async () => {
+      prisma.facture.findMany.mockResolvedValue([
+        { id: 'f1', libelle: 'Internat - Tranche 1', montantPaye: 0 },
+        { id: 'f2', libelle: 'Internat - Tranche 2', montantPaye: 0 },
+      ]);
+      await service.annulerEcolageRegime('ecole', 'e1', 'a1', 'n-ps', 'INTERNAT');
+      expect(prisma.tarifEcolage.findMany.mock.calls[0][0].where).toEqual({
+        ecoleId: 'ecole',
+        niveauId: 'n-ps',
+        anneeScolaireId: 'a1',
+        regime: 'INTERNAT',
+      });
+      expect(prisma.facture.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['f1', 'f2'] } },
+        data: { statut: 'ANNULEE' },
+      });
+    });
+
+    it('refuse si un paiement a déjà été enregistré, sans rien annuler', async () => {
+      prisma.facture.findMany.mockResolvedValue([
+        { id: 'f1', libelle: 'Internat - Tranche 1', montantPaye: 2500000 },
+        { id: 'f2', libelle: 'Internat - Tranche 2', montantPaye: 0 },
+      ]);
+      await expect(service.annulerEcolageRegime('ecole', 'e1', 'a1', 'n-ps', 'INTERNAT')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.facture.updateMany).not.toHaveBeenCalled();
     });
   });
 

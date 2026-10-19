@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { enteteLogo } from '../common/pdf/entete.util';
 
 // toLocaleString('fr-FR') separe les milliers par une espace fine insecable
 // (U+202F), absente de la police PDF par defaut : elle s'affiche comme un
@@ -31,7 +32,7 @@ export function genererFacturePdf(data: FactureData): Promise<Buffer> {
 
     const solde = data.montantTotal - data.montantPaye;
 
-    doc.fontSize(18).text(data.ecoleNom, { align: 'center' });
+    enteteLogo(doc); // logo de l'école à la place de son nom
     doc.moveDown();
     doc.fontSize(14).text('Facture', { align: 'center' });
     doc.moveDown(2);

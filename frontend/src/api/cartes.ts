@@ -57,6 +57,24 @@ async function ouvrirPdf(chemin: string) {
 export const ouvrirCarteEleve = (eleveId: string) => ouvrirPdf(`/cartes-scolaires/eleve/${eleveId}/pdf`);
 export const ouvrirCartesClasse = (classeId: string) => ouvrirPdf(`/cartes-scolaires/classe/${classeId}/pdf`);
 
+// Cartes de retrait (maternelle)
+export interface ClasseRetrait {
+  id: string;
+  nom: string;
+  niveau: string;
+  maternelle: boolean;
+  effectif: number;
+}
+
+export async function fetchClassesRetrait(): Promise<{ anneeScolaire: { id: string; libelle: string }; classes: ClasseRetrait[] }> {
+  const { data } = await apiClient.get('/cartes-retrait/classes');
+  return data;
+}
+
+export const ouvrirCartesRetraitClasse = (classeId: string) => ouvrirPdf(`/cartes-retrait/classe/${classeId}/pdf`);
+export const ouvrirCartesRetraitEleves = (eleveIds: string[]) =>
+  ouvrirPdf(`/cartes-retrait/eleves/pdf?eleves=${eleveIds.map(encodeURIComponent).join(',')}`);
+
 // Message d'erreur lisible, y compris quand la réponse d'erreur d'un PDF arrive sous forme de blob.
 export async function messageErreurCarte(erreur: any, parDefaut: string): Promise<string> {
   // Erreur levée par le navigateur (image illisible...) : son message est déjà rédigé pour l'utilisateur.

@@ -1,5 +1,5 @@
 import { IsDateString, IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
-import { Genre } from '../../generated/prisma/enums';
+import { Genre, Regime } from '../../generated/prisma/enums';
 
 export class CreateDemandeDto {
   @IsString()
@@ -58,6 +58,11 @@ export class AccepterDemandeDto {
   @MinLength(1)
   classeId: string;
 
+  // Absent : externat.
+  @IsOptional()
+  @IsEnum(Regime)
+  regime?: Regime;
+
   @IsOptional()
   @IsString()
   matricule?: string;
@@ -111,4 +116,38 @@ export class InscriptionDirecteDto {
   @IsOptional()
   @IsEmail()
   emailParent?: string;
+
+  // Filiation (facultative) : père et mère
+
+  @IsOptional()
+  @IsString()
+  perePrenom?: string;
+
+  @IsOptional()
+  @IsString()
+  pereNom?: string;
+
+  @IsOptional()
+  @IsString()
+  pereTelephone?: string;
+
+  @IsOptional()
+  @IsString()
+  pereProfession?: string;
+
+  @IsOptional()
+  @IsString()
+  merePrenom?: string;
+
+  @IsOptional()
+  @IsString()
+  mereNom?: string;
+
+  @IsOptional()
+  @IsString()
+  mereTelephone?: string;
+
+  @IsOptional()
+  @IsString()
+  mereProfession?: string;
 }

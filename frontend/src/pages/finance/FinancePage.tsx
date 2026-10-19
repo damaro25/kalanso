@@ -57,6 +57,11 @@ import { POSTES_DEPENSE } from './postes';
 const CATEGORIES_DEPENSE = POSTES_DEPENSE;
 const CATEGORIES_RECETTE = ['Cantine', 'Transport', 'Vente fournitures', 'Don / Subvention', 'Autre'];
 
+// Mois abrégés (« Oct ») ; colonnes hors période en entier (« Après juin »)
+function libelleAxe(v: string) {
+  return v.startsWith('Avant') || v.startsWith('Après') ? v : v.slice(0, 3);
+}
+
 function fmt(n: number) {
   return n.toLocaleString('fr-FR');
 }
@@ -297,7 +302,7 @@ export function FinancePage() {
         <ResponsiveContainer width="100%" height="85%">
           <BarChart data={cr?.parMois ?? []}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="libelle" tickFormatter={(v: string) => v.slice(0, 3)} />
+            <XAxis dataKey="libelle" tickFormatter={libelleAxe} />
             <YAxis tickFormatter={(v: number) => `${v / 1000}k`} />
             <Tooltip formatter={(v) => `${fmt(Number(v))} GNF`} />
             <Legend />
@@ -374,7 +379,7 @@ export function FinancePage() {
         <ResponsiveContainer width="100%" height="85%">
           <BarChart data={recettes?.parMois ?? []}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="libelle" tickFormatter={(v: string) => v.slice(0, 3)} />
+            <XAxis dataKey="libelle" tickFormatter={libelleAxe} />
             <YAxis tickFormatter={(v: number) => `${v / 1000}k`} />
             <Tooltip formatter={(v) => `${fmt(Number(v))} GNF`} />
             <Bar dataKey="montant" fill="#2f9e44" name="Recettes" />
@@ -390,7 +395,7 @@ export function FinancePage() {
         <ResponsiveContainer width="100%" height="85%">
           <LineChart data={salaires?.parMois ?? []}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="libelle" tickFormatter={(v: string) => v.slice(0, 3)} />
+            <XAxis dataKey="libelle" tickFormatter={libelleAxe} />
             <YAxis tickFormatter={(v: number) => `${v / 1000}k`} />
             <Tooltip formatter={(v) => `${fmt(Number(v))} GNF`} />
             <Legend />

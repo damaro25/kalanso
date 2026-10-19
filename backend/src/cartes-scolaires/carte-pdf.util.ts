@@ -35,6 +35,7 @@ export interface CarteData {
   niveau: string;
   photo: Buffer | null; // JPEG ou PNG, les seuls formats que PDFKit sait intégrer
   codeQr: string;
+  filiation?: string; // « <père> et de <mère> » (voir formaterFiliation)
 }
 
 type Doc = InstanceType<typeof PDFDocument>;
@@ -107,8 +108,9 @@ function dessinerRecto(doc: Doc, x: number, y: number, carte: CarteData, ecole: 
   ligne(doc, carte.prenom, xi, y + 52, largeur, 9.5);
 
   const naissance = formaterDate(carte.dateNaissance);
-  if (naissance) ligne(doc, `Né(e) le ${naissance}`, xi, y + 68, largeur, 7.5, false, GRIS);
-  if (carte.lieuNaissance) ligne(doc, `à ${carte.lieuNaissance}`, xi, y + 79, largeur, 7.5, false, GRIS);
+  if (naissance) ligne(doc, `Né(e) le ${naissance}`, xi, y + 65, largeur, 7.5, false, GRIS);
+  if (carte.lieuNaissance) ligne(doc, `à ${carte.lieuNaissance}`, xi, y + 75, largeur, 7.5, false, GRIS);
+  if (carte.filiation) ligne(doc, `Filiation : ${carte.filiation}`, xi, y + 85, largeur, 6, false, GRIS);
 
   // Le QR code occupe le coin bas droit : les lignes du bas restent à sa gauche.
   const largeurBas = largeur - 48;

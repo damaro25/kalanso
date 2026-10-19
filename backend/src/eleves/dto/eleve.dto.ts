@@ -1,4 +1,4 @@
-import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsString, ValidateIf } from 'class-validator';
 import { Genre } from '../../generated/prisma/enums';
 
 export class UpdateEleveDto {
@@ -18,7 +18,9 @@ export class UpdateEleveDto {
   @IsString()
   matricule?: string;
 
+  // Chaîne vide : date effacée
   @IsOptional()
+  @ValidateIf((_o, v) => v !== '')
   @IsDateString()
   dateNaissance?: string;
 

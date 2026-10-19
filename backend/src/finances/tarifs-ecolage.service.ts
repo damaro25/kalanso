@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTarifEcolageDto, UpdateTarifEcolageDto } from './dto/tarif-ecolage.dto';
+import { exigerAnneeOuverte } from '../common/annee-cloturee.util';
 
 @Injectable()
 export class TarifsEcolageService {
@@ -32,6 +33,7 @@ export class TarifsEcolageService {
 
   async create(ecoleId: string, dto: CreateTarifEcolageDto) {
     await this.verifierReferences(ecoleId, dto.niveauId, dto.anneeScolaireId);
+    await exigerAnneeOuverte(this.prisma, dto.anneeScolaireId, 'modifier ses tarifs');
     return this.prisma.tarifEcolage.create({
       data: {
         ecoleId,
@@ -39,16 +41,23 @@ export class TarifsEcolageService {
         anneeScolaireId: dto.anneeScolaireId,
         libelle: dto.libelle,
         montant: dto.montant,
+        regime: dto.regime,
+        dateEcheance: dto.dateEcheance ? new Date(dto.dateEcheance) : undefined,
       },
     });
   }
 
   async update(ecoleId: string, id: string, dto: UpdateTarifEcolageDto) {
-    await this.prisma.tarifEcolage.findFirstOrThrow({ where: { id, ecoleId } });
+    const actuel = await this.prisma.tarifEcolage.findFirstOrThrow({ where: { id, ecoleId } });
+    await exigerAnneeOuverte(this.prisma, actuel.anneeScolaireId, 'modifier ses tarifs');
+    await exigerAnneeOuverte(this.prisma, dto.anneeScolaireId, 'modifier ses tarifs');
     await this.verifierReferences(ecoleId, undefined, dto.anneeScolaireId);
     return this.prisma.tarifEcolage.update({
       where: { id },
-      data: dto,
+      data: {
+        ...dto,
+        dateEcheance: dto.dateEcheance === undefined ? undefined : dto.dateEcheance && new Date(dto.dateEcheance),
+      },
       include: { niveau: true },
     });
   }

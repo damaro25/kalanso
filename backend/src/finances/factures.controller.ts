@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Res,
   UploadedFile,
   UseGuards,
@@ -34,8 +35,9 @@ export class FacturesController {
 
   @Get('factures/impayes')
   @Roles(...ROLES_FINANCES)
-  findImpayes(@CurrentUser() user: JwtPayloadUser) {
-    return this.service.findImpayes(user.ecoleId);
+  findImpayes(@CurrentUser() user: JwtPayloadUser, @Query('portee') portee?: string) {
+    const p = portee === 'COURANTE' || portee === 'ARRIERES' ? portee : 'TOUTES';
+    return this.service.findImpayes(user.ecoleId, p);
   }
 
   @Get('factures/:id')

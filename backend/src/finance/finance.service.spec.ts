@@ -107,7 +107,8 @@ describe('FinanceService', () => {
       const r = await service.dashboard('ecole');
 
       // écolage = tout sauf INSCRIPTION : 1000 + 500 + 50
-      expect(r.ecolage).toEqual({ totalFacture: 1550, totalEncaisse: 900, totalRestant: 650, tauxRecouvrement: 58.1 });
+      // écolage seul : la facture AUTRE (assurance...) de 50 n'y est pas
+      expect(r.ecolage).toEqual({ totalFacture: 1500, totalEncaisse: 900, totalRestant: 600, tauxRecouvrement: 60 });
       expect(r.inscription).toEqual({ totalFacture: 100, totalEncaisse: 100, totalRestant: 0, tauxRecouvrement: 100 });
     });
 
@@ -158,13 +159,24 @@ describe('FinanceService', () => {
       expect(r.soldeNet).toBe(900 - 500); // encaissé écolage - salaires cumulés
     });
 
-    it("borne les paiements et mouvements sur [début, fin de l'année + 1 jour[", async () => {
+    it("compte les paiements des factures de l'année (quelle que soit leur date) et les mouvements datés dans l'année", async () => {
       await service.dashboard('ecole');
 
-      const plage = prisma.paiement.findMany.mock.calls[0][0].where.datePaiement;
+      expect(prisma.paiement.findMany.mock.calls[0][0].where).toEqual({ ecoleId: 'ecole', facture: { anneeScolaireId: 'a1' } });
+      const plage = prisma.mouvementFinancier.findMany.mock.calls[0][0].where.date;
       expect(plage.gte).toEqual(new Date('2026-10-01T12:00:00Z'));
       expect(plage.lt).toEqual(new Date('2027-08-01T12:00:00Z')); // le 31 juillet est inclus en entier
-      expect(prisma.mouvementFinancier.findMany.mock.calls[0][0].where.date).toEqual(plage);
+    });
+
+    it('compte l\'assurance et les formations payées dans « Autres recettes », pas dans l\'écolage', async () => {
+      prisma.paiement.findMany.mockResolvedValue([
+        { montant: 900, facture: { type: 'ECOLAGE' } },
+        { montant: 100, facture: { type: 'INSCRIPTION' } },
+        { montant: 25, facture: { type: 'AUTRE' } },
+        { montant: 40, facture: { type: 'FORMATION' } },
+      ]);
+      const r = await service.dashboard('ecole');
+      expect(r.compteResultat).toMatchObject({ ecolageEncaisse: 900, inscriptionEncaisse: 100, autresRecettes: 115, recettesTotales: 1115 });
     });
 
     it('exclut les factures annulées', async () => {
@@ -197,20 +209,26 @@ describe('FinanceService', () => {
       expect(r.parMois[3]).toMatchObject({ annee: 2027, mois: 1 });
     });
 
-    it('affecte chaque paiement au bon mois et ignore ceux hors année scolaire', async () => {
+    it("affecte chaque paiement de l'année au bon mois ; encaissé avant la rentrée ou après la fin : « Avant octobre » / « Après juin »", async () => {
       prisma.paiement.findMany.mockResolvedValue([
         { montant: 100, datePaiement: new Date('2026-11-05T12:00:00Z') },
         { montant: 50, datePaiement: new Date('2026-11-20T12:00:00Z') },
         { montant: 70, datePaiement: new Date('2027-02-10T12:00:00Z') },
         { montant: 999, datePaiement: new Date('2026-09-15T12:00:00Z') }, // avant la rentrée
+        { montant: 5, datePaiement: new Date('2027-10-11T12:00:00Z') }, // après la fin de l'année
       ]);
 
       const r = await service.recettesParMois('ecole');
 
+      expect(prisma.paiement.findMany.mock.calls[0][0].where).toEqual({ ecoleId: 'ecole', facture: { anneeScolaireId: 'a1' } });
       const parMois = Object.fromEntries(r.parMois.map((m: any) => [`${m.annee}-${m.mois}`, m.montant]));
+      expect(parMois['2026-10']).toBe(0);
       expect(parMois['2026-11']).toBe(150);
       expect(parMois['2027-2']).toBe(70);
-      expect(r.total).toBe(220); // le paiement de septembre n'est pas compté
+      expect(parMois['2027-7']).toBe(0);
+      expect(r.parMois[0]).toMatchObject({ libelle: 'Avant octobre', hors: 'AVANT', montant: 999 });
+      expect(r.parMois[r.parMois.length - 1]).toMatchObject({ libelle: 'Après juin', hors: 'APRES', montant: 5 });
+      expect(r.total).toBe(1224); // rien n'est perdu
     });
 
     it('masse salariale : montant par mois et cumul progressif', async () => {
@@ -252,13 +270,17 @@ describe('FinanceService', () => {
     });
 
     beforeEach(() => {
-      prisma.paiement.findMany.mockResolvedValue([
+      const tous = [
         paiement('2026-10-05T12:00:00Z', 300000, 'e1'),
         paiement('2026-10-20T12:00:00Z', 100000, 'e2'),
         paiement('2026-11-10T12:00:00Z', 200000, 'e1'),
         paiement('2026-12-15T12:00:00Z', 50000, 'e3'), // aucune inscription connue
-        paiement('2027-01-12T12:00:00Z', 20000, 'e4', 'a0'), // facture d'une année passée
-      ]);
+        paiement('2027-01-12T12:00:00Z', 20000, 'e4', 'a0'), // facture d'une année passée : comptée dans a0
+      ];
+      // Comme la base : seuls les paiements des factures de l'année demandée
+      prisma.paiement.findMany.mockImplementation(async ({ where }: any) =>
+        tous.filter((p) => !where.facture || p.facture.anneeScolaireId === where.facture.anneeScolaireId),
+      );
       prisma.inscription.findMany.mockResolvedValue([
         { eleveId: 'e1', anneeScolaireId: 'a1', classe: { niveau: { nom: '6eme', ordre: 6 } } },
         { eleveId: 'e2', anneeScolaireId: 'a1', classe: { niveau: { nom: '5eme', ordre: 5 } } },
@@ -361,6 +383,22 @@ describe('FinanceService', () => {
         expect(r.tresorerieFinale[9]).toBe(15000);
       });
 
+      it("compte en « Après juin » le paiement d'une facture de l'année encaissé après sa fin, pas celui d'une autre année", async () => {
+        prisma.paiement.findMany.mockResolvedValue([
+          paiement('2027-10-11T12:00:00Z', 200000, 'e1', 'a1'),
+          paiement('2027-10-11T12:00:00Z', 70000, 'e2', 'a2'),
+        ]);
+        prisma.bulletinPaie.findMany.mockResolvedValue([]);
+        prisma.mouvementFinancier.findMany.mockResolvedValue([]);
+
+        const r = await service.tresorerieParMois('ecole');
+
+        expect(prisma.paiement.findMany.mock.calls[0][0].where).toEqual({ ecoleId: 'ecole', facture: { anneeScolaireId: 'a1' } });
+        expect(r.mois[r.mois.length - 1]).toMatchObject({ libelle: 'Après juin', hors: 'APRES' });
+        expect(r.encaissements.parMois[r.mois.length - 1]).toBe(200000);
+        expect(r.encaissements.total).toBe(200000);
+      });
+
       it('ne montre aucune colonne hors période quand tout est entre octobre et juin', async () => {
         prisma.anneeScolaire.findFirst.mockResolvedValue(ANNEE_JUILLET);
         prisma.paiement.findMany.mockResolvedValue([paiement('2026-11-05T12:00:00Z', 1000, 'e1')]);
@@ -379,19 +417,19 @@ describe('FinanceService', () => {
       expect(r.periode).toEqual({ debut: '2026-10-01', fin: '2027-07-31' });
     });
 
-    it('ventile les encaissements par niveau (selon l\'année de la facture), puis les autres recettes', async () => {
+    it("ventile les encaissements par niveau, puis les autres recettes ; le paiement d'une facture d'une autre année n'est pas compté ici", async () => {
       const { encaissements } = await service.tresorerieParMois('ecole');
 
+      expect(prisma.paiement.findMany.mock.calls[0][0].where).toEqual({ ecoleId: 'ecole', facture: { anneeScolaireId: 'a1' } });
       expect(encaissements.lignes.map((l) => [l.libelle, l.origine, l.total])).toEqual([
-        ['4eme', 'ELEVES', 20000], // niveau de l'année de la facture (a0), pas 3eme
         ['5eme', 'ELEVES', 100000],
         ['6eme', 'ELEVES', 500000],
         ['Sans niveau', 'ELEVES', 50000],
         ['Cantine', 'MOUVEMENT', 30000],
       ]);
-      expect(encaissements.parMois.slice(0, 4)).toEqual([400000, 230000, 50000, 20000]);
+      expect(encaissements.parMois.slice(0, 4)).toEqual([400000, 230000, 50000, 0]);
       expect(encaissements.parMois.slice(4)).toEqual([0, 0, 0, 0, 0]);
-      expect(encaissements.total).toBe(700000);
+      expect(encaissements.total).toBe(680000);
     });
 
     it('place les salaires (bulletins de paie) puis les dépenses par catégorie dans les décaissements', async () => {
@@ -423,9 +461,9 @@ describe('FinanceService', () => {
     it('applique FT = E − D, Ti = Tf du mois précédent (0 le premier mois) et Tf = FT + Ti', async () => {
       const r = await service.tresorerieParMois('ecole');
 
-      expect(r.flux.slice(0, 4)).toEqual([80000, -90000, 50000, 20000]);
-      expect(r.tresorerieInitiale.slice(0, 5)).toEqual([0, 80000, -10000, 40000, 60000]);
-      expect(r.tresorerieFinale.slice(0, 5)).toEqual([80000, -10000, 40000, 60000, 60000]);
+      expect(r.flux.slice(0, 4)).toEqual([80000, -90000, 50000, 0]);
+      expect(r.tresorerieInitiale.slice(0, 5)).toEqual([0, 80000, -10000, 40000, 40000]);
+      expect(r.tresorerieFinale.slice(0, 5)).toEqual([80000, -10000, 40000, 40000, 40000]);
 
       r.flux.forEach((ft, i) => {
         expect(r.tresorerieFinale[i]).toBe(r.tresorerieInitiale[i] + ft);
@@ -433,9 +471,17 @@ describe('FinanceService', () => {
       });
     });
 
+    it("chaque paiement n'est compté que dans une seule année (pas de double comptage d'une année à l'autre)", async () => {
+      const cetteAnnee = await service.tresorerieParMois('ecole', 'a1');
+      prisma.anneeScolaire.findFirst.mockResolvedValue({ ...ANNEE, id: 'a0', libelle: '2025-2026' });
+      const anneePassee = await service.tresorerieParMois('ecole', 'a0');
+      const eleves = (r: any) => r.encaissements.lignes.filter((l: any) => l.origine === 'ELEVES').reduce((t: number, l: any) => t + l.total, 0);
+      expect(eleves(cetteAnnee) + eleves(anneePassee)).toBe(670000); // la somme de tous les paiements, une fois
+    });
+
     it('le bénéfice vaut encaissements − décaissements, soit la trésorerie finale du dernier mois', async () => {
       const r = await service.tresorerieParMois('ecole');
-      expect(r.benefice).toBe(60000);
+      expect(r.benefice).toBe(40000);
       expect(r.benefice).toBe(r.tresorerieFinale[r.tresorerieFinale.length - 1]);
       expect(r.benefice).toBe(r.flux.reduce((a, v) => a + v, 0));
     });
@@ -465,6 +511,120 @@ describe('FinanceService', () => {
     it("utilise l'année demandée, cloisonnée par école", async () => {
       await service.tresorerieParMois('ecole', 'a-demandee');
       expect(prisma.anneeScolaire.findFirst.mock.calls[0][0].where).toEqual({ id: 'a-demandee', ecoleId: 'ecole' });
+    });
+  });
+
+  describe('paiementsParTranche (tableau de bord : tranches et genres par régime)', () => {
+    const insc = (eleveId: string, regime: string, genre: 'M' | 'F') => ({ eleveId, regime, eleve: { genre } });
+    const fac = (eleveId: string, type: string, libelle: string, total: number, paye: number) => ({
+      eleveId,
+      type,
+      libelle,
+      montantTotal: total,
+      montantPaye: paye,
+    });
+
+    beforeEach(() => {
+      prisma.inscription.findMany.mockResolvedValue([
+        insc('e1', 'EXTERNAT', 'M'),
+        insc('e2', 'EXTERNAT', 'F'),
+        insc('e3', 'INTERNAT', 'F'),
+      ]);
+      prisma.facture.findMany.mockResolvedValue([
+        fac('e1', 'INSCRIPTION', "Frais d'inscription - CP1", 50000, 50000),
+        fac('e1', 'ECOLAGE', 'Externat - Tranche 1', 500000, 300000),
+        fac('e2', 'ECOLAGE', 'Externat - Tranche 1', 500000, 500000),
+        fac('e2', 'ECOLAGE', 'Externat - Tranche 2', 400000, 0),
+        fac('e3', 'ECOLAGE', 'Trimestre 3', 900000, 900000),
+        fac('e3', 'ECOLAGE', 'Ecolage Annuel', 100000, 20000),
+      ]);
+    });
+
+    const regime = (r: any, cle: string) => r.regimes.find((x: any) => x.regime === cle);
+    const tranche = (g: any, cle: string) => g.tranches.find((t: any) => t.cle === cle);
+    const genre = (g: any, cle: string) => g.genres.find((x: any) => x.genre === cle);
+
+    it("ne prend que l'écolage et l'inscription non annulés des élèves inscrits de l'année", async () => {
+      await service.paiementsParTranche('ecole');
+      expect(prisma.facture.findMany.mock.calls[0][0].where).toMatchObject({
+        ecoleId: 'ecole',
+        anneeScolaireId: 'a1',
+        statut: { not: 'ANNULEE' },
+        type: { in: ['ECOLAGE', 'INSCRIPTION'] },
+      });
+      expect(prisma.inscription.findMany.mock.calls[0][0].where).toEqual({ ecoleId: 'ecole', anneeScolaireId: 'a1', statut: { in: ['EN_COURS', 'TERMINEE'] } });
+    });
+
+    it('agrège par tranche : attendu, payé, reste, taux, soldés / non soldés', async () => {
+      const r = await service.paiementsParTranche('ecole');
+      const tous = regime(r, 'TOUS');
+      expect(tranche(tous, 'T1')).toEqual({
+        cle: 'T1', libelle: 'Tranche 1', attendu: 1000000, paye: 800000, reste: 200000, taux: 80, soldes: 1, nonSoldes: 1,
+      });
+      expect(tranche(tous, 'INSCRIPTION')).toMatchObject({ attendu: 50000, paye: 50000, soldes: 1, nonSoldes: 0, taux: 100 });
+      expect(tranche(tous, 'T2')).toMatchObject({ attendu: 400000, paye: 0, reste: 400000, nonSoldes: 1 });
+      expect(tranche(tous, 'T3')).toMatchObject({ attendu: 900000, paye: 900000 }); // « Trimestre 3 »
+      expect(tranche(tous, 'AUTRE')).toMatchObject({ attendu: 100000, paye: 20000 });
+    });
+
+    it('agrège par genre : effectif, attendu, payé, reste, taux', async () => {
+      const r = await service.paiementsParTranche('ecole');
+      const tous = regime(r, 'TOUS');
+      expect(genre(tous, 'M')).toEqual({ genre: 'M', libelle: 'Garçons', effectif: 1, attendu: 550000, paye: 350000, reste: 200000, taux: 63.6 });
+      expect(genre(tous, 'F')).toMatchObject({ effectif: 2, attendu: 1900000, paye: 1420000, reste: 480000 });
+      expect(genre(tous, 'TOTAL')).toMatchObject({ effectif: 3, attendu: 2450000, paye: 1770000 });
+    });
+
+    it('filtre par classe (inscription de l\'année), récapitulatif par régime compris', async () => {
+      prisma.classe.findFirst.mockResolvedValue({ id: 'c1' });
+      prisma.inscription.findMany.mockResolvedValue([insc('e3', 'INTERNAT', 'F')]);
+      prisma.facture.findMany.mockResolvedValue([fac('e3', 'ECOLAGE', 'Trimestre 3', 900000, 900000)]);
+
+      const r = await service.paiementsParTranche('ecole', { classeId: 'c1' });
+
+      expect(prisma.classe.findFirst.mock.calls[0][0].where).toEqual({ id: 'c1', ecoleId: 'ecole', anneeScolaireId: 'a1' });
+      expect(prisma.inscription.findMany.mock.calls[0][0].where).toEqual({
+        ecoleId: 'ecole', anneeScolaireId: 'a1', statut: { in: ['EN_COURS', 'TERMINEE'] }, classeId: 'c1',
+      });
+      expect(prisma.facture.findMany.mock.calls[0][0].where.eleve).toEqual({
+        inscriptions: { some: { anneeScolaireId: 'a1', statut: { in: ['EN_COURS', 'TERMINEE'] }, classeId: 'c1' } },
+      });
+      expect(genre(regime(r, 'TOUS'), 'TOTAL')).toMatchObject({ effectif: 1, paye: 900000 });
+      expect(genre(regime(r, 'EXTERNAT'), 'TOTAL')).toMatchObject({ effectif: 0, paye: 0 });
+    });
+
+    it("refuse une classe d'une autre année ou d'une autre école", async () => {
+      prisma.classe.findFirst.mockResolvedValue(null);
+      await expect(service.paiementsParTranche('ecole', { classeId: 'c-autre' })).rejects.toThrow('Classe invalide');
+      expect(prisma.facture.findMany).not.toHaveBeenCalled();
+    });
+
+    it("une année passée garde ses chiffres après le passage : inscriptions terminées comprises, abandons exclus", async () => {
+      await service.paiementsParTranche('ecole');
+      await service.dashboard('ecole').catch(() => undefined);
+      for (const [arg] of prisma.inscription.findMany.mock.calls) {
+        if (arg.where.anneeScolaireId) expect(arg.where.statut).toEqual({ in: ['EN_COURS', 'TERMINEE'] });
+      }
+    });
+
+    it('par régime, et cohérent : somme des régimes = total, payé des tranches = payé des genres', async () => {
+      const r = await service.paiementsParTranche('ecole');
+      expect(r.regimes.map((x: any) => x.regime)).toEqual(['TOUS', 'EXTERNAT', 'SEMI_INTERNAT', 'INTERNAT', 'PENSIONNAT']);
+      const externat = regime(r, 'EXTERNAT');
+      expect(tranche(externat, 'T1')).toMatchObject({ attendu: 1000000, paye: 800000 });
+      expect(tranche(externat, 'T3')).toMatchObject({ attendu: 0, paye: 0 });
+      expect(genre(regime(r, 'INTERNAT'), 'TOTAL')).toMatchObject({ effectif: 1, paye: 920000 });
+      expect(regime(r, 'PENSIONNAT').genres[2]).toMatchObject({ effectif: 0, attendu: 0, taux: 0 });
+
+      for (const g of r.regimes) {
+        const payeTranches = g.tranches.reduce((a: number, t: any) => a + t.paye, 0);
+        expect(payeTranches).toBe(genre(g, 'TOTAL').paye);
+      }
+      const somme = (champ: 'paye' | 'attendu' | 'effectif') =>
+        r.regimes.filter((x: any) => x.regime !== 'TOUS').reduce((a: number, x: any) => a + genre(x, 'TOTAL')[champ], 0);
+      expect(somme('paye')).toBe(genre(regime(r, 'TOUS'), 'TOTAL').paye);
+      expect(somme('attendu')).toBe(genre(regime(r, 'TOUS'), 'TOTAL').attendu);
+      expect(somme('effectif')).toBe(3);
     });
   });
 
@@ -517,7 +677,7 @@ describe('FinanceService', () => {
     it("se limite à l'année scolaire courante, aux inscrits EN_COURS et aux factures non annulées", async () => {
       await service.statistiquesPaiements('ecole');
 
-      expect(prisma.inscription.findMany.mock.calls[0][0].where).toEqual({ ecoleId: 'ecole', anneeScolaireId: 'a1', statut: 'EN_COURS' });
+      expect(prisma.inscription.findMany.mock.calls[0][0].where).toEqual({ ecoleId: 'ecole', anneeScolaireId: 'a1', statut: { in: ['EN_COURS', 'TERMINEE'] } });
       expect(prisma.facture.findMany.mock.calls[0][0].where).toMatchObject({
         ecoleId: 'ecole',
         anneeScolaireId: 'a1',
@@ -578,31 +738,34 @@ describe('FinanceService', () => {
     });
   });
 
-  describe('bordereauJournalier (encaissements du jour, une ligne par reçu)', () => {
+  describe('bordereauJournalier (encaissements du jour, une ligne par élève)', () => {
     const paiement = (
       id: string,
       eleve: { id: string; prenom: string; nom: string; matricule: string | null },
       facture: { id: string; libelle: string; type: string; anneeScolaireId?: string },
       montant: number,
       mode = 'ESPECES',
-    ) => ({ id, montant, mode, facture: { anneeScolaireId: 'a1', ...facture, eleve } });
+      numero: number | null = null,
+    ) => ({ id, numero, montant, mode, facture: { anneeScolaireId: 'a1', ...facture, eleve } });
     const djine = { id: 'e1', prenom: 'Djiné', nom: 'KANTE', matricule: '383CR021' };
     const fatoumata = { id: 'e2', prenom: 'Fatoumata', nom: 'BANGOURA', matricule: '501CE022' };
     const sansClasse = { id: 'e3', prenom: 'Aliou', nom: 'CONDE', matricule: null };
+    const ECOLE = { nom: 'Les Ecoles Mamé-TA', sigle: 'MTA', ville: 'Conakry', nomDirecteur: 'Mamadou DIALLO', nomComptable: 'Aïssata SOW' };
 
     beforeEach(() => {
-      prisma.ecole.findUniqueOrThrow.mockResolvedValue({ nom: 'Les Ecoles Mamé-TA', ville: 'Conakry' });
+      prisma.ecole.findUniqueOrThrow.mockResolvedValue(ECOLE);
       prisma.niveau.findMany.mockResolvedValue([
         { id: 'n1', nom: 'CP1' },
         { id: 'n6', nom: '6eme' },
       ]);
       prisma.paiement.findMany.mockResolvedValue([
-        paiement('rec-1', djine, { id: 'f-insc1', libelle: 'Frais de réinscription - 6eme A', type: 'INSCRIPTION' }, 150000),
-        paiement('rec-2', djine, { id: 'f-eco1', libelle: 'Trimestre 1', type: 'ECOLAGE' }, 600000, 'VIREMENT'),
-        paiement('rec-3', djine, { id: 'f-eco1', libelle: 'Trimestre 1', type: 'ECOLAGE' }, 200000), // second versement, même facture
-        paiement('rec-4', fatoumata, { id: 'f-insc2', libelle: "Frais d'inscription - CP1", type: 'INSCRIPTION' }, 200000, 'MOBILE_MONEY'),
-        paiement('rec-5', sansClasse, { id: 'f-cantine', libelle: 'Cantine', type: 'AUTRE' }, 15000),
-        paiement('rec-6', fatoumata, { id: 'f-eco2', libelle: 'Ecolage Annuel', type: 'ECOLAGE' }, 100000),
+        paiement('rec-1', djine, { id: 'f-insc1', libelle: 'Frais de réinscription - 6eme A', type: 'INSCRIPTION' }, 150000, 'ESPECES', 1480),
+        paiement('rec-2', djine, { id: 'f-eco1', libelle: 'Trimestre 1', type: 'ECOLAGE' }, 600000, 'VIREMENT', 1481),
+        paiement('rec-3', djine, { id: 'f-eco1', libelle: 'Trimestre 1', type: 'ECOLAGE' }, 200000, 'ESPECES', 1482), // second versement, même facture
+        paiement('rec-4', fatoumata, { id: 'f-insc2', libelle: "Frais d'inscription - CP1", type: 'INSCRIPTION' }, 200000, 'MOBILE_MONEY', 1483),
+        paiement('rec-5', sansClasse, { id: 'f-cantine', libelle: 'Cantine', type: 'AUTRE' }, 15000, 'ESPECES', 1484),
+        paiement('rec-6', fatoumata, { id: 'f-eco2', libelle: 'Ecolage Annuel', type: 'ECOLAGE' }, 100000, 'ESPECES', 1485),
+        paiement('rec-7', djine, { id: 'f-ass1', libelle: 'Assurance scolaire', type: 'AUTRE' }, 25000, 'ESPECES', 1486),
       ]);
       prisma.inscription.findMany.mockResolvedValue([
         { eleveId: 'e1', anneeScolaireId: 'a1', classe: { nom: '6eme A', niveauId: 'n6', niveau: { nom: '6eme', ordre: 6 } } },
@@ -610,76 +773,118 @@ describe('FinanceService', () => {
       ]);
     });
 
-    it('produit une ligne par reçu (paiement), avec le N° de reçu et le N° de la facture réglée', async () => {
+    it('produit une ligne par élève, avec tous ses N° de reçu (6 chiffres) et les paiements pour les ouvrir', async () => {
       const r = await service.bordereauJournalier('ecole', { date: '2026-10-08' });
 
       expect(r.date).toBe('2026-10-08');
-      expect(r.ecole).toEqual({ nom: 'Les Ecoles Mamé-TA', ville: 'Conakry' });
-      expect(r.lignes).toHaveLength(6); // deux versements sur la même facture = deux lignes
-      expect(r.lignes.map((l) => [l.numeroRecu, l.numeroFacture])).toEqual([
-        ['rec-4', 'f-insc2'],
-        ['rec-6', 'f-eco2'],
-        ['rec-1', 'f-insc1'],
-        ['rec-2', 'f-eco1'],
-        ['rec-3', 'f-eco1'],
-        ['rec-5', 'f-cantine'],
+      expect(r.ecole).toEqual(ECOLE);
+      expect(r.lignes).toHaveLength(3); // trois élèves, sept reçus
+      expect(r.lignes.map((l) => [l.eleveId, l.numerosRecu, l.paiementIds])).toEqual([
+        ['e2', ['001483', '001485'], ['rec-4', 'rec-6']],
+        ['e1', ['001480', '001481', '001482', '001486'], ['rec-1', 'rec-2', 'rec-3', 'rec-7']],
+        ['e3', ['001484'], ['rec-5']],
       ]);
 
-      expect(r.lignes[2]).toEqual({
-        numeroRecu: 'rec-1',
-        numeroFacture: 'f-insc1',
+      expect(r.lignes[1]).toEqual({
+        paiementIds: ['rec-1', 'rec-2', 'rec-3', 'rec-7'],
+        numerosRecu: ['001480', '001481', '001482', '001486'],
         eleveId: 'e1',
         matricule: '383CR021',
         nomComplet: 'Djiné KANTE',
         classe: '6eme A',
         niveau: '6eme',
-        typeOperation: 'Réinscription',
-        fraisEtudes: 0,
-        totalPaye: 150000,
+        fraisInscription: 150000,
+        typeInscription: 'Réinscription',
+        assurance: 25000,
+        totalInscriptionAssurance: 175000,
+        fraisEtudes: 800000,
+        fraisFormations: 0,
+        totalPaye: 975000,
         date: '2026-10-08',
-        observation: 'Espèces',
+        observation: 'Espèces, Virement',
       });
+    });
+
+    it("un paiement sans numéro (base non migrée) garde son identifiant comme N° de reçu", async () => {
+      prisma.paiement.findMany.mockResolvedValue([
+        paiement('rec-x', djine, { id: 'f-eco1', libelle: 'Trimestre 1', type: 'ECOLAGE' }, 1000),
+      ]);
+      const r = await service.bordereauJournalier('ecole', { date: '2026-10-08' });
+      expect(r.lignes[0].numerosRecu).toEqual(['rec-x']);
     });
 
     it("classe les lignes par niveau puis par classe, comme la feuille papier, les élèves sans classe à la fin", async () => {
       const r = await service.bordereauJournalier('ecole', { date: '2026-10-08' });
-      expect(r.lignes.map((l) => l.classe)).toEqual(['CP1', 'CP1', '6eme A', '6eme A', '6eme A', '']);
+      expect(r.lignes.map((l) => l.classe)).toEqual(['CP1', '6eme A', '']);
     });
 
-    it("déduit le type d'opération de la facture : inscription, réinscription, écolage, trimestre ou autre", async () => {
+    it("répartit les versements : frais d'inscription, assurance, frais d'études ; le total payé cumule tout", async () => {
       const r = await service.bordereauJournalier('ecole', { date: '2026-10-08' });
-      expect(Object.fromEntries(r.lignes.map((l) => [l.numeroRecu, l.typeOperation]))).toEqual({
-        'rec-1': 'Réinscription',
-        'rec-2': 'Trimestre 1',
-        'rec-3': 'Trimestre 1',
-        'rec-4': 'Inscription',
-        'rec-5': 'Autre',
-        'rec-6': 'Écolage',
+      const parEleve = Object.fromEntries(r.lignes.map((l) => [l.eleveId, l]));
+
+      expect(parEleve.e1).toMatchObject({
+        fraisInscription: 150000, typeInscription: 'Réinscription', assurance: 25000, totalInscriptionAssurance: 175000,
+        fraisEtudes: 800000, totalPaye: 975000,
+      });
+      expect(parEleve.e2).toMatchObject({
+        fraisInscription: 200000, typeInscription: 'Inscription', assurance: 0, totalInscriptionAssurance: 200000,
+        fraisEtudes: 100000, totalPaye: 300000,
+      });
+      // la cantine n'entre dans aucune colonne, seulement dans le total payé
+      expect(parEleve.e3).toMatchObject({
+        fraisInscription: 0, typeInscription: '', assurance: 0, totalInscriptionAssurance: 0, fraisEtudes: 0, totalPaye: 15000,
       });
     });
 
-    it("ne remplit « frais d'études payés » que pour l'écolage et les trimestres ; le total payé est toujours rempli", async () => {
+    it("met le paiement d'une facture ASSURANCE dans la colonne Assurance", async () => {
+      prisma.paiement.findMany.mockResolvedValue([
+        paiement('r1', djine, { id: 'f1', libelle: 'Assurance scolaire 2026-2027', type: 'ASSURANCE' }, 50000),
+        paiement('r2', djine, { id: 'f2', libelle: "Frais de réinscription - 6eme A", type: 'INSCRIPTION' }, 50000),
+      ]);
       const r = await service.bordereauJournalier('ecole', { date: '2026-10-08' });
-      const parRecu = Object.fromEntries(r.lignes.map((l) => [l.numeroRecu, l]));
-
-      expect(parRecu['rec-1']).toMatchObject({ fraisEtudes: 0, totalPaye: 150000 }); // réinscription
-      expect(parRecu['rec-4']).toMatchObject({ fraisEtudes: 0, totalPaye: 200000 }); // inscription
-      expect(parRecu['rec-5']).toMatchObject({ fraisEtudes: 0, totalPaye: 15000 }); // autre
-      expect(parRecu['rec-2']).toMatchObject({ fraisEtudes: 600000, totalPaye: 600000 }); // trimestre
-      expect(parRecu['rec-6']).toMatchObject({ fraisEtudes: 100000, totalPaye: 100000 }); // écolage
+      expect(r.lignes[0]).toMatchObject({ assurance: 50000, fraisInscription: 50000, totalInscriptionAssurance: 100000, totalPaye: 100000 });
+      expect(r.totaux.assurance).toBe(50000);
     });
 
-    it("indique le mode de paiement en observation", async () => {
+    it("met les formations supplémentaires dans leur colonne, comptées dans le total payé", async () => {
+      prisma.paiement.findMany.mockResolvedValue([
+        paiement('r1', djine, { id: 'f1', libelle: 'Formation Arabe — Octobre 2026', type: 'FORMATION' }, 25000),
+        paiement('r2', djine, { id: 'f2', libelle: 'Formation Informatique — Octobre 2026', type: 'FORMATION' }, 50000),
+        paiement('r3', djine, { id: 'f3', libelle: 'Trimestre 1', type: 'ECOLAGE' }, 100000),
+      ]);
       const r = await service.bordereauJournalier('ecole', { date: '2026-10-08' });
-      const parRecu = Object.fromEntries(r.lignes.map((l) => [l.numeroRecu, l.observation]));
-      expect(parRecu['rec-2']).toBe('Virement');
-      expect(parRecu['rec-4']).toBe('Mobile money');
-      expect(parRecu['rec-1']).toBe('Espèces');
+      expect(r.lignes).toHaveLength(1); // toujours une ligne par élève
+      expect(r.lignes[0]).toMatchObject({ fraisFormations: 75000, fraisEtudes: 100000, assurance: 0, totalPaye: 175000 });
+      expect(r.totaux.fraisFormations).toBe(75000);
     });
 
-    it('totalise les frais d\'études et le total payé', async () => {
+    it('indique inscription et réinscription quand un élève paie les deux le même jour', async () => {
+      prisma.paiement.findMany.mockResolvedValue([
+        paiement('r1', djine, { id: 'f1', libelle: "Frais d'inscription", type: 'INSCRIPTION' }, 1000),
+        paiement('r2', djine, { id: 'f2', libelle: 'Frais de réinscription', type: 'INSCRIPTION' }, 2000),
+      ]);
+      const r = await service.bordereauJournalier('ecole', { date: '2026-10-08' });
+      expect(r.lignes[0]).toMatchObject({ typeInscription: 'Inscription + Réinscription', fraisInscription: 3000 });
+    });
+
+    it("indique le ou les modes de paiement en observation, sans doublon", async () => {
+      const r = await service.bordereauJournalier('ecole', { date: '2026-10-08' });
+      const parEleve = Object.fromEntries(r.lignes.map((l) => [l.eleveId, l.observation]));
+      expect(parEleve.e1).toBe('Espèces, Virement');
+      expect(parEleve.e2).toBe('Mobile money, Espèces');
+      expect(parEleve.e3).toBe('Espèces');
+    });
+
+    it('totalise chaque colonne de montants', async () => {
       const { totaux } = await service.bordereauJournalier('ecole', { date: '2026-10-08' });
-      expect(totaux).toEqual({ fraisEtudes: 900000, totalPaye: 1265000 });
+      expect(totaux).toEqual({
+        fraisInscription: 350000,
+        assurance: 25000,
+        totalInscriptionAssurance: 375000,
+        fraisEtudes: 900000,
+        fraisFormations: 0,
+        totalPaye: 1290000,
+      });
     });
 
     it('ne prend que les paiements de la journée demandée (de 00:00 inclus à 00:00 exclu)', async () => {
@@ -696,10 +901,17 @@ describe('FinanceService', () => {
       expect(r.date).toBe('2027-03-01');
     });
 
-    it('filtre par niveau : seuls les reçus des élèves de ce niveau, ceux sans classe sont écartés', async () => {
+    it('filtre par niveau : seuls les élèves de ce niveau, ceux sans classe sont écartés', async () => {
       const r = await service.bordereauJournalier('ecole', { date: '2026-10-08', niveauId: 'n6' });
-      expect(r.lignes.map((l) => l.numeroRecu)).toEqual(['rec-1', 'rec-2', 'rec-3']);
-      expect(r.totaux).toEqual({ fraisEtudes: 800000, totalPaye: 950000 });
+      expect(r.lignes.map((l) => [l.eleveId, l.paiementIds])).toEqual([['e1', ['rec-1', 'rec-2', 'rec-3', 'rec-7']]]);
+      expect(r.totaux).toEqual({
+        fraisInscription: 150000,
+        assurance: 25000,
+        totalInscriptionAssurance: 175000,
+        fraisEtudes: 800000,
+        fraisFormations: 0,
+        totalPaye: 975000,
+      });
     });
 
     it("propose les niveaux de l'école pour le filtre", async () => {
@@ -731,7 +943,7 @@ describe('FinanceService', () => {
       prisma.paiement.findMany.mockResolvedValue([]);
       const r = await service.bordereauJournalier('ecole', { date: '2026-10-08' });
       expect(r.lignes).toEqual([]);
-      expect(r.totaux).toEqual({ fraisEtudes: 0, totalPaye: 0 });
+      expect(r.totaux).toEqual({ fraisInscription: 0, assurance: 0, totalInscriptionAssurance: 0, fraisEtudes: 0, fraisFormations: 0, totalPaye: 0 });
       expect(prisma.inscription.findMany).not.toHaveBeenCalled();
     });
   });

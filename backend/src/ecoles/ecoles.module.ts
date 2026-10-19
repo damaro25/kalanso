@@ -7,9 +7,10 @@ import { ClassesController } from './classes.controller';
 import { ClassesService } from './classes.service';
 import { UtilisateursController } from './utilisateurs.controller';
 import { UtilisateursService } from './utilisateurs.service';
+import { EcolePubliqueController } from './ecole-publique.controller';
 
 @Module({
-  controllers: [AnneesScolairesController, NiveauxController, ClassesController, UtilisateursController],
+  controllers: [AnneesScolairesController, NiveauxController, ClassesController, UtilisateursController, EcolePubliqueController],
   providers: [AnneesScolairesService, NiveauxService, ClassesService, UtilisateursService],
   exports: [ClassesService],
 })

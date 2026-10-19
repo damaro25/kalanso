@@ -30,7 +30,13 @@ const accent: MantineColorsTuple = [
   '#7a4600',
 ];
 
+// Police de toute l'application : Calibri, celle du bordereau journalier en Excel. Installée avec Windows et
+// Office, donc aucun chargement réseau (l'application fonctionne hors ligne) ; Carlito (même gabarit, libre) sous
+// Linux, sinon la police système. Les numéros de reçu gardent la police à chasse fixe (fontFamilyMonospace).
+export const POLICE = 'Calibri, Carlito, "Segoe UI", Arial, sans-serif';
+
 export const theme = createTheme({
+  fontFamily: POLICE,
   primaryColor: 'kalanso',
   primaryShade: { light: 6, dark: 5 },
   defaultRadius: 'md',
@@ -39,6 +45,7 @@ export const theme = createTheme({
     accent,
   },
   headings: {
+    fontFamily: POLICE,
     fontWeight: '700',
   },
   components: {

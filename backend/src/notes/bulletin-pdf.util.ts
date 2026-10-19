@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { enteteLogo } from '../common/pdf/entete.util';
 
 interface BulletinNoteData {
   matiere: string;
@@ -29,7 +30,7 @@ export function genererBulletinPdf(data: BulletinData): Promise<Buffer> {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(18).text(data.ecoleNom, { align: 'center' });
+    enteteLogo(doc); // logo de l'école à la place de son nom
     doc.moveDown();
     doc.fontSize(14).text(`Bulletin de notes — Trimestre ${data.trimestre}`, { align: 'center' });
     doc.moveDown(2);

@@ -1,23 +1,38 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { codeSuppressionValide } from './code-suppression';
-import { estFraisEtudes, typeOperation, type TypeOperation } from '../finances/type-operation.util';
+import { estFraisEtudes, typeOperation } from '../finances/type-operation.util';
+import { formaterNumeroRecu } from '../finances/numero-recu.util';
 
+// Assurance : facture ASSURANCE, ou ancienne facture « Autre » dont le libellé parle d'assurance
+const estAssurance = (f: { type: string; libelle: string }) =>
+  f.type === 'ASSURANCE' || (f.type === 'AUTRE' && /assurance|t-shirt/i.test(f.libelle));
+
+// Une ligne par élève et par jour : tous ses versements du jour y sont cumulés.
 export interface LigneBordereau {
-  numeroRecu: string; // N° du reçu = identifiant du paiement
-  numeroFacture: string; // N° de la facture réglée
+  paiementIds: string[]; // pour ouvrir les reçus, dans l'ordre d'encaissement
+  numerosRecu: string[]; // N° des reçus tels qu'imprimés (« 001480 »)
   eleveId: string;
   matricule: string | null;
   nomComplet: string;
   classe: string;
   niveau: string;
-  typeOperation: TypeOperation;
-  fraisEtudes: number; // le montant, quand l'opération est de l'écolage ou un trimestre
+  fraisInscription: number;
+  typeInscription: string; // « Inscription », « Réinscription » (jointes par « + »), vide sinon
+  assurance: number;
+  totalInscriptionAssurance: number;
+  fraisEtudes: number; // la part écolage / trimestres des versements
+  fraisFormations: number; // formations supplémentaires (arabe, anglais, informatique...)
   totalPaye: number;
   date: string; // AAAA-MM-JJ
-  observation: string; // mode de paiement
+  observation: string; // mode(s) de paiement
 }
 type Ligne = LigneBordereau;
+
+// Élèves d'une année pour les statistiques (tableau de bord, recouvrement, tranches, garçons / filles...) :
+// inscription en cours, ou terminée au passage à l'année suivante. Une année passée garde ainsi ses chiffres
+// après le passage ; les abandons et transferts restent exclus.
+const STATUTS_INSCRITS_ANNEE: ('EN_COURS' | 'TERMINEE')[] = ['EN_COURS', 'TERMINEE'];
 
 const MOIS_LABELS = [
   'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -44,6 +59,36 @@ export class FinanceService {
 
   // Bornes [début, fin exclusive) de l'année scolaire, pour filtrer les
   // enregistrements horodatés (paiements, mouvements).
+  // Règle commune à tous les tableaux (compte de résultat, recettes, trésorerie, budget) : un paiement d'élève
+  // appartient à l'année scolaire de la facture qu'il règle, quelle que soit sa date. Il compte ainsi une seule
+  // fois, dans la bonne année, même encaissé avant la rentrée ou après la fin de l'année (avant, un écolage
+  // 2025-2026 réglé en octobre 2026 comptait dans 2026-2027, ou dans les deux). Seul le bordereau journalier,
+  // qui est un journal de caisse, reste daté.
+  private paiementsDeLAnnee(ecoleId: string, anneeScolaireId: string) {
+    return { ecoleId, facture: { anneeScolaireId } };
+  }
+
+  // Position d'une date par rapport aux mois de l'année : index du mois, ou AVANT / APRES (paiement d'une
+  // facture de l'année encaissé avant la rentrée ou après la fin) ; il va alors dans une colonne
+  // « Avant octobre » / « Après juin », comme dans la trésorerie.
+  private positionMois(moisListe: { annee: number; mois: number }[], date: Date): number | 'AVANT' | 'APRES' {
+    const i = date.getFullYear() * 12 + date.getMonth() - (moisListe[0].annee * 12 + moisListe[0].mois - 1);
+    return i < 0 ? 'AVANT' : i >= moisListe.length ? 'APRES' : i;
+  }
+
+  // Ajoute les colonnes hors période (seulement si elles ont des montants) autour des mois de l'année.
+  private avecHorsPeriode<T extends { annee: number; mois: number; libelle: string }>(
+    lignes: T[],
+    avant: Omit<T, 'annee' | 'mois' | 'libelle'> | null,
+    apres: Omit<T, 'annee' | 'mois' | 'libelle'> | null,
+  ): (T & { hors?: 'AVANT' | 'APRES' })[] {
+    return [
+      ...(avant ? [{ annee: 0, mois: 0, libelle: 'Avant octobre', hors: 'AVANT' as const, ...avant } as T & { hors: 'AVANT' }] : []),
+      ...lignes,
+      ...(apres ? [{ annee: 0, mois: 0, libelle: 'Après juin', hors: 'APRES' as const, ...apres } as T & { hors: 'APRES' }] : []),
+    ];
+  }
+
   private plageAnnee(annee: { dateDebut: Date; dateFin: Date }) {
     const debut = new Date(annee.dateDebut);
     const fin = new Date(annee.dateFin);
@@ -75,7 +120,8 @@ export class FinanceService {
       where: { ecoleId, anneeScolaireId: annee.id, statut: { not: 'ANNULEE' } },
     });
 
-    const facturesEcolage = factures.filter((f) => f.type !== 'INSCRIPTION');
+    // Écolage seul (comme les tranches) : l'assurance, les formations et les autres frais sont dans « Autres recettes ».
+    const facturesEcolage = factures.filter((f) => f.type === 'ECOLAGE');
     const facturesInscription = factures.filter((f) => f.type === 'INSCRIPTION');
 
     const totalFacture = facturesEcolage.reduce((a, f) => a + Number(f.montantTotal), 0);
@@ -96,7 +142,7 @@ export class FinanceService {
     }
 
     const inscriptions = await this.prisma.inscription.findMany({
-      where: { ecoleId, anneeScolaireId: annee.id, statut: 'EN_COURS' },
+      where: { ecoleId, anneeScolaireId: annee.id, statut: { in: STATUTS_INSCRITS_ANNEE } },
       select: { eleveId: true },
     });
     const nbInscrits = inscriptions.length;
@@ -137,11 +183,15 @@ export class FinanceService {
     const { debut, fin } = this.plageAnnee(annee);
 
     const paiementsAnnee = await this.prisma.paiement.findMany({
-      where: { ecoleId, datePaiement: { gte: debut, lt: fin } },
+      where: this.paiementsDeLAnnee(ecoleId, annee.id),
       select: { montant: true, facture: { select: { type: true } } },
     });
     const ecolageEncaisseAnnee = paiementsAnnee
-      .filter((p) => p.facture.type !== 'INSCRIPTION')
+      .filter((p) => p.facture.type === 'ECOLAGE')
+      .reduce((a, p) => a + Number(p.montant), 0);
+    // Assurance, formations supplémentaires et autres frais payés par les élèves
+    const autresFraisEleves = paiementsAnnee
+      .filter((p) => p.facture.type !== 'ECOLAGE' && p.facture.type !== 'INSCRIPTION')
       .reduce((a, p) => a + Number(p.montant), 0);
     const inscriptionEncaisseeAnnee = paiementsAnnee
       .filter((p) => p.facture.type === 'INSCRIPTION')
@@ -151,9 +201,9 @@ export class FinanceService {
       where: { ecoleId, date: { gte: debut, lt: fin } },
       select: { type: true, montant: true },
     });
-    const autresRecettes = mouvements
-      .filter((m) => m.type === 'RECETTE')
-      .reduce((a, m) => a + Number(m.montant), 0);
+    const autresRecettes =
+      autresFraisEleves +
+      mouvements.filter((m) => m.type === 'RECETTE').reduce((a, m) => a + Number(m.montant), 0);
     const depensesAutres = mouvements
       .filter((m) => m.type === 'DEPENSE')
       .reduce((a, m) => a + Number(m.montant), 0);
@@ -254,7 +304,7 @@ export class FinanceService {
     const moisListe = this.moisDeAnnee(annee);
 
     const [paiements, bulletins, mouvements] = await Promise.all([
-      this.prisma.paiement.findMany({ where: { ecoleId, datePaiement: { gte: debut, lt: fin } }, select: { montant: true, datePaiement: true } }),
+      this.prisma.paiement.findMany({ where: this.paiementsDeLAnnee(ecoleId, annee.id), select: { montant: true, datePaiement: true } }),
       this.prisma.bulletinPaie.findMany({
         where: { ecoleId, OR: moisListe.map((m) => ({ annee: m.annee, mois: m.mois })) },
         select: { mois: true, annee: true, netAPayer: true },
@@ -265,9 +315,13 @@ export class FinanceService {
     const parMois = moisListe.map((m) => ({ ...m, recettes: 0, depenses: 0, resultat: 0 }));
     const index = new Map(parMois.map((l, i) => [`${l.annee}-${l.mois}`, i]));
 
+    let recettesAvant = 0;
+    let recettesApres = 0;
     for (const p of paiements) {
-      const i = index.get(`${p.datePaiement.getFullYear()}-${p.datePaiement.getMonth() + 1}`);
-      if (i !== undefined) parMois[i].recettes += Number(p.montant);
+      const pos = this.positionMois(moisListe, p.datePaiement);
+      if (pos === 'AVANT') recettesAvant += Number(p.montant);
+      else if (pos === 'APRES') recettesApres += Number(p.montant);
+      else parMois[pos].recettes += Number(p.montant);
     }
     for (const b of bulletins) {
       const i = index.get(`${b.annee}-${b.mois}`);
@@ -280,15 +334,20 @@ export class FinanceService {
       else parMois[i].depenses += Number(m.montant);
     }
     for (const l of parMois) l.resultat = l.recettes - l.depenses;
+    const lignes = this.avecHorsPeriode(
+      parMois,
+      recettesAvant ? { recettes: recettesAvant, depenses: 0, resultat: recettesAvant } : null,
+      recettesApres ? { recettes: recettesApres, depenses: 0, resultat: recettesApres } : null,
+    );
 
-    const totalRecettes = parMois.reduce((a, l) => a + l.recettes, 0);
-    const totalDepenses = parMois.reduce((a, l) => a + l.depenses, 0);
+    const totalRecettes = lignes.reduce((a, l) => a + l.recettes, 0);
+    const totalDepenses = lignes.reduce((a, l) => a + l.depenses, 0);
     return {
       anneeScolaire: { id: annee.id, libelle: annee.libelle },
       totalRecettes,
       totalDepenses,
       resultatNet: totalRecettes - totalDepenses,
-      parMois,
+      parMois: lignes,
     };
   }
 
@@ -297,7 +356,8 @@ export class FinanceService {
   //   - colonnes : octobre à juin, comme le budget papier ; les opérations datées avant
   //     octobre (inscriptions de la rentrée...) ou après juin vont dans une colonne
   //     « Avant octobre » / « Après juin », affichée seulement si elle n'est pas vide,
-  //     pour que les totaux restent ceux de l'année entière
+  //     pour que les totaux restent ceux de l'année entière ; un paiement d'une facture de l'année
+  //     encaissé hors période va dans « Avant octobre » / « Après juin »
   //   - encaissements : paiements des élèves, ventilés par niveau, + autres recettes
   //   - décaissements : salaires (bulletins validés) + dépenses, par catégorie
   //   - flux FT = E − D ; trésorerie initiale Ti = trésorerie finale de la colonne précédente
@@ -329,8 +389,10 @@ export class FinanceService {
     const dansAnnee = (d: Date) => d >= debut && d < fin;
 
     const [paiements, bulletins, mouvements] = await Promise.all([
+      // Les paiements des factures de cette année, même encaissés avant son début ou après sa fin (voir
+      // paiementsDeLAnnee) : ils vont alors dans « Avant octobre » / « Après juin ».
       this.prisma.paiement.findMany({
-        where: { ecoleId, datePaiement: { gte: debut, lt: fin } },
+        where: this.paiementsDeLAnnee(ecoleId, annee.id),
         select: { montant: true, datePaiement: true, facture: { select: { eleveId: true, anneeScolaireId: true } } },
       }),
       this.prisma.bulletinPaie.findMany({
@@ -372,7 +434,7 @@ export class FinanceService {
 
     const encaissements = new Map<string, Ligne>();
     for (const p of paiements) {
-      if (!dansAnnee(p.datePaiement)) continue;
+      if (p.facture.anneeScolaireId !== annee.id) continue; // garde-fou (la requête filtre déjà)
       const i = colonneDe(p.datePaiement.getFullYear(), p.datePaiement.getMonth() + 1);
       const niveau =
         niveauParEleveEtAnnee.get(`${p.facture.eleveId}|${p.facture.anneeScolaireId}`) ?? niveauParEleve.get(p.facture.eleveId);
@@ -456,23 +518,28 @@ export class FinanceService {
   // Recettes encaissées par mois (année scolaire), basées sur les paiements.
   async recettesParMois(ecoleId: string, anneeScolaireId?: string) {
     const annee = await this.resoudreAnnee(ecoleId, anneeScolaireId);
-    const { debut, fin } = this.plageAnnee(annee);
     const moisListe = this.moisDeAnnee(annee);
     const paiements = await this.prisma.paiement.findMany({
-      where: { ecoleId, datePaiement: { gte: debut, lt: fin } },
+      where: this.paiementsDeLAnnee(ecoleId, annee.id),
       select: { montant: true, datePaiement: true },
     });
 
     const parMois = moisListe.map((m) => ({ ...m, montant: 0 }));
-    const index = new Map(parMois.map((l, i) => [`${l.annee}-${l.mois}`, i]));
+    let avant = 0;
+    let apres = 0;
     let total = 0;
     for (const p of paiements) {
-      const i = index.get(`${p.datePaiement.getFullYear()}-${p.datePaiement.getMonth() + 1}`);
-      if (i === undefined) continue;
-      parMois[i].montant += Number(p.montant);
+      const pos = this.positionMois(moisListe, p.datePaiement);
+      if (pos === 'AVANT') avant += Number(p.montant);
+      else if (pos === 'APRES') apres += Number(p.montant);
+      else parMois[pos].montant += Number(p.montant);
       total += Number(p.montant);
     }
-    return { anneeScolaire: { id: annee.id, libelle: annee.libelle }, total, parMois };
+    return {
+      anneeScolaire: { id: annee.id, libelle: annee.libelle },
+      total,
+      parMois: this.avecHorsPeriode(parMois, avant ? { montant: avant } : null, apres ? { montant: apres } : null),
+    };
   }
 
   // Masse salariale par mois + cumul (année scolaire). Brouillons compris (voir dashboard()).
@@ -502,7 +569,7 @@ export class FinanceService {
     const annee = await this.resoudreAnnee(ecoleId, anneeScolaireId);
 
     const inscriptions = await this.prisma.inscription.findMany({
-      where: { ecoleId, anneeScolaireId: annee.id, statut: 'EN_COURS' },
+      where: { ecoleId, anneeScolaireId: annee.id, statut: { in: STATUTS_INSCRITS_ANNEE } },
       include: { classe: { include: { niveau: true } } },
     });
     const classeParEleve = new Map<string, { id: string; nom: string; niveau: string }>();
@@ -548,6 +615,122 @@ export class FinanceService {
     };
   }
 
+  // Paiements par tranche et par genre, pour chaque régime et pour l'ensemble (tableau de bord).
+  // Base : élèves inscrits (EN_COURS) de l'année et leurs factures d'écolage et d'inscription non annulées ; les
+  // formations supplémentaires et les autres frais (assurance...) n'entrent pas dans les tranches.
+  //   - tranche d'une facture : inscription / réinscription, « ... Tranche n » (grille tarifaire) ou
+  //     « Trimestre n », sinon « Écolage (autre) »
+  //   - par tranche : attendu, payé, reste, taux, élèves soldés / non soldés (sur leurs factures de la tranche)
+  //   - par genre : effectif inscrit, attendu, payé, reste, taux
+  // Filtre facultatif par classe (de l'inscription de l'année), appliqué aussi au récapitulatif par régime.
+  async paiementsParTranche(ecoleId: string, filtres: { anneeScolaireId?: string; classeId?: string } = {}) {
+    const annee = await this.resoudreAnnee(ecoleId, filtres.anneeScolaireId);
+    const { classeId } = filtres;
+    if (classeId) {
+      const classe = await this.prisma.classe.findFirst({ where: { id: classeId, ecoleId, anneeScolaireId: annee.id } });
+      if (!classe) throw new BadRequestException('Classe invalide pour cette année scolaire');
+    }
+    const [inscriptions, factures] = await Promise.all([
+      this.prisma.inscription.findMany({
+        where: { ecoleId, anneeScolaireId: annee.id, statut: { in: STATUTS_INSCRITS_ANNEE }, ...(classeId ? { classeId } : {}) },
+        select: { eleveId: true, regime: true, eleve: { select: { genre: true } } },
+      }),
+      this.prisma.facture.findMany({
+        where: {
+          ecoleId,
+          anneeScolaireId: annee.id,
+          statut: { not: 'ANNULEE' },
+          type: { in: ['ECOLAGE', 'INSCRIPTION'] },
+          eleve: { inscriptions: { some: { anneeScolaireId: annee.id, statut: { in: STATUTS_INSCRITS_ANNEE }, ...(classeId ? { classeId } : {}) } } },
+        },
+        select: { eleveId: true, type: true, libelle: true, montantTotal: true, montantPaye: true },
+      }),
+    ]);
+
+    const TRANCHES = [
+      { cle: 'INSCRIPTION', libelle: 'Inscription / réinscription' },
+      { cle: 'T1', libelle: 'Tranche 1' },
+      { cle: 'T2', libelle: 'Tranche 2' },
+      { cle: 'T3', libelle: 'Tranche 3' },
+      { cle: 'AUTRE', libelle: 'Écolage (autre)' },
+    ] as const;
+    type CleTranche = (typeof TRANCHES)[number]['cle'];
+    const trancheDe = (f: { type: string; libelle: string }): CleTranche => {
+      if (f.type === 'INSCRIPTION') return 'INSCRIPTION';
+      const n = /tranche\s*([123])\b/i.exec(f.libelle)?.[1] ?? /^Trimestre ([123])$/.exec(typeOperation(f))?.[1];
+      return n ? (`T${n}` as CleTranche) : 'AUTRE';
+    };
+
+    // Un élève, une inscription de l'année (la première si plusieurs)
+    const eleves = new Map<string, { regime: string; genre: string }>();
+    for (const i of inscriptions) if (!eleves.has(i.eleveId)) eleves.set(i.eleveId, { regime: i.regime, genre: i.eleve.genre });
+
+    // Montants par élève et par tranche
+    const parEleveTranche = new Map<string, { attendu: number; paye: number }>();
+    for (const f of factures) {
+      if (!eleves.has(f.eleveId)) continue;
+      const cle = `${f.eleveId}|${trancheDe(f)}`;
+      const m = parEleveTranche.get(cle) ?? { attendu: 0, paye: 0 };
+      m.attendu += Number(f.montantTotal);
+      m.paye += Number(f.montantPaye);
+      parEleveTranche.set(cle, m);
+    }
+
+    const taux = (paye: number, attendu: number) => (attendu > 0 ? Math.round((paye / attendu) * 1000) / 10 : 0);
+    const groupe = (regime: string | null) => {
+      const ids = [...eleves.entries()].filter(([, e]) => !regime || e.regime === regime);
+      const tranches = TRANCHES.map(({ cle, libelle }) => {
+        let attendu = 0;
+        let paye = 0;
+        let soldes = 0;
+        let nonSoldes = 0;
+        for (const [id] of ids) {
+          const m = parEleveTranche.get(`${id}|${cle}`);
+          if (!m) continue;
+          attendu += m.attendu;
+          paye += m.paye;
+          if (m.paye >= m.attendu) soldes++;
+          else nonSoldes++;
+        }
+        return { cle, libelle, attendu, paye, reste: Math.max(attendu - paye, 0), taux: taux(paye, attendu), soldes, nonSoldes };
+      }).filter((t) => t.cle !== 'AUTRE' || t.attendu > 0); // « Écolage (autre) » seulement s'il y en a
+
+      const ligneGenre = (genre: 'M' | 'F' | null, libelle: string) => {
+        const membres = ids.filter(([, e]) => !genre || e.genre === genre);
+        let attendu = 0;
+        let paye = 0;
+        for (const [id] of membres) {
+          for (const { cle } of TRANCHES) {
+            const m = parEleveTranche.get(`${id}|${cle}`);
+            if (m) {
+              attendu += m.attendu;
+              paye += m.paye;
+            }
+          }
+        }
+        return { genre: genre ?? 'TOTAL', libelle, effectif: membres.length, attendu, paye, reste: Math.max(attendu - paye, 0), taux: taux(paye, attendu) };
+      };
+      return {
+        tranches,
+        genres: [ligneGenre('M', 'Garçons'), ligneGenre('F', 'Filles'), ligneGenre(null, 'Total')],
+      };
+    };
+
+    const REGIMES = [
+      { regime: 'EXTERNAT', libelle: 'Externat' },
+      { regime: 'SEMI_INTERNAT', libelle: 'Semi-internat' },
+      { regime: 'INTERNAT', libelle: 'Internat' },
+      { regime: 'PENSIONNAT', libelle: 'Pensionnat' },
+    ];
+    return {
+      anneeScolaire: { id: annee.id, libelle: annee.libelle },
+      regimes: [
+        { regime: 'TOUS', libelle: 'Tous', ...groupe(null) },
+        ...REGIMES.map((r) => ({ ...r, ...groupe(r.regime) })),
+      ],
+    };
+  }
+
   // Statistiques de paiement des élèves inscrits, garçons / filles / total, avec filtres
   // niveau et classe (année scolaire courante par défaut). Un élève est « payé » quand il a
   // des factures et que tout est soldé, « non payé » quand il lui reste quelque chose à
@@ -582,7 +765,7 @@ export class FinanceService {
       where: {
         ecoleId,
         anneeScolaireId: annee.id,
-        statut: 'EN_COURS',
+        statut: { in: STATUTS_INSCRITS_ANNEE },
         ...(filtres.classeId ? { classeId: filtres.classeId } : filtres.niveauId ? { classe: { niveauId: filtres.niveauId } } : {}),
       },
       select: { eleveId: true, eleve: { select: { genre: true } } },
@@ -670,12 +853,17 @@ export class FinanceService {
     }
 
     const [ecole, paiements] = await Promise.all([
-      this.prisma.ecole.findUniqueOrThrow({ where: { id: ecoleId }, select: { nom: true, ville: true } }),
+      this.prisma.ecole.findUniqueOrThrow({
+        where: { id: ecoleId },
+        select: { nom: true, sigle: true, ville: true, nomDirecteur: true, nomComptable: true },
+      }),
       this.prisma.paiement.findMany({
         where: { ecoleId, datePaiement: { gte: debut, lt: fin } },
         orderBy: { datePaiement: 'asc' },
         select: {
           id: true,
+          numero: true,
+          reference: true,
           montant: true,
           mode: true,
           facture: {
@@ -718,7 +906,11 @@ export class FinanceService {
       MOBILE_MONEY: 'Mobile money',
       AUTRE: 'Autre',
     };
-    const brutes: (Ligne & { ordre: number })[] = [];
+    const parEleve = new Map<string, Ligne & { ordre: number; modes: string[]; typesInscription: string[] }>();
+    const ajouterSansDoublon = <T>(liste: T[], valeur: T) => {
+      if (!liste.includes(valeur)) liste.push(valeur);
+    };
+    const lotsVus = new Set<string>();
     for (const p of paiements) {
       const { facture } = p;
       const classe = classeParEleveEtAnnee.get(`${facture.eleve.id}|${facture.anneeScolaireId}`) ?? classeParEleve.get(facture.eleve.id);
@@ -726,36 +918,74 @@ export class FinanceService {
 
       const type = typeOperation(facture);
       const montant = Number(p.montant);
-      brutes.push({
-        numeroRecu: p.id,
-        numeroFacture: facture.id,
-        eleveId: facture.eleve.id,
-        matricule: facture.eleve.matricule,
-        nomComplet: `${facture.eleve.prenom} ${facture.eleve.nom}`,
-        classe: classe?.nom ?? '',
-        niveau: classe?.niveau.nom ?? '',
-        ordre: classe?.niveau.ordre ?? Number.MAX_SAFE_INTEGER,
-        typeOperation: type,
-        fraisEtudes: estFraisEtudes(type) ? montant : 0,
-        totalPaye: montant,
-        date,
-        observation: LIBELLES_MODE[p.mode] ?? p.mode,
-      });
+      let ligne = parEleve.get(facture.eleve.id);
+      if (!ligne) {
+        ligne = {
+          paiementIds: [],
+          numerosRecu: [],
+          eleveId: facture.eleve.id,
+          matricule: facture.eleve.matricule,
+          nomComplet: `${facture.eleve.prenom} ${facture.eleve.nom}`,
+          classe: classe?.nom ?? '',
+          niveau: classe?.niveau.nom ?? '',
+          ordre: classe?.niveau.ordre ?? Number.MAX_SAFE_INTEGER,
+          fraisInscription: 0,
+          typeInscription: '',
+          assurance: 0,
+          totalInscriptionAssurance: 0,
+          fraisEtudes: 0,
+          fraisFormations: 0,
+          totalPaye: 0,
+          date,
+          observation: '',
+          modes: [],
+          typesInscription: [],
+        };
+        parEleve.set(facture.eleve.id, ligne);
+      }
+      // Paiements enregistrés ensemble (même référence « lot:… ») : un seul reçu, celui du premier.
+      const lot = p.reference?.startsWith('lot:') ? p.reference : null;
+      if (!lot || !lotsVus.has(lot)) {
+        ligne.paiementIds.push(p.id);
+        ligne.numerosRecu.push(formaterNumeroRecu(p));
+        if (lot) lotsVus.add(lot);
+      }
+      ajouterSansDoublon(ligne.modes, LIBELLES_MODE[p.mode] ?? p.mode);
+      if (type === 'Inscription' || type === 'Réinscription') {
+        ligne.fraisInscription += montant;
+        ajouterSansDoublon(ligne.typesInscription, type);
+      } else if (facture.type === 'FORMATION') {
+        ligne.fraisFormations += montant;
+      } else if (estAssurance(facture)) {
+        ligne.assurance += montant;
+      } else if (estFraisEtudes(type)) {
+        ligne.fraisEtudes += montant;
+      }
+      ligne.totalPaye += montant;
     }
 
-    // Par niveau puis par classe, comme la feuille papier ; à classe égale, dans l'ordre d'encaissement
-    // (le tri est stable et les paiements arrivent classés par heure).
-    const lignes: Ligne[] = brutes
+    // Par niveau puis par classe, comme la feuille papier ; à classe égale, dans l'ordre du premier
+    // encaissement (le tri est stable et les paiements arrivent classés par heure).
+    const lignes: Ligne[] = [...parEleve.values()]
       .sort((a, b) => a.ordre - b.ordre || a.classe.localeCompare(b.classe))
-      .map(({ ordre: _ordre, ...ligne }) => ligne);
+      .map(({ ordre: _ordre, modes, typesInscription, ...ligne }) => ({
+        ...ligne,
+        typeInscription: typesInscription.join(' + '),
+        totalInscriptionAssurance: ligne.fraisInscription + ligne.assurance,
+        observation: modes.join(', '),
+      }));
 
     return {
       date,
-      ecole: { nom: ecole.nom, ville: ecole.ville },
+      ecole,
       filtres: { niveaux },
       lignes,
       totaux: {
+        fraisInscription: lignes.reduce((a, l) => a + l.fraisInscription, 0),
+        assurance: lignes.reduce((a, l) => a + l.assurance, 0),
+        totalInscriptionAssurance: lignes.reduce((a, l) => a + l.totalInscriptionAssurance, 0),
         fraisEtudes: lignes.reduce((a, l) => a + l.fraisEtudes, 0),
+        fraisFormations: lignes.reduce((a, l) => a + l.fraisFormations, 0),
         totalPaye: lignes.reduce((a, l) => a + l.totalPaye, 0),
       },
     };
@@ -766,7 +996,7 @@ export class FinanceService {
     const annee = await this.resoudreAnnee(ecoleId, anneeScolaireId);
 
     const inscriptions = await this.prisma.inscription.findMany({
-      where: { ecoleId, anneeScolaireId: annee.id, statut: 'EN_COURS' },
+      where: { ecoleId, anneeScolaireId: annee.id, statut: { in: STATUTS_INSCRITS_ANNEE } },
       include: { eleve: true, classe: true },
       orderBy: { eleve: { nom: 'asc' } },
     });

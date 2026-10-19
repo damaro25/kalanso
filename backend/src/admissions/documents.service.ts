@@ -6,7 +6,15 @@ import { TypeDocument } from '../generated/prisma/enums';
 
 export const DOSSIER_UPLOADS = join(process.cwd(), 'uploads', 'admissions');
 
-const TYPES_VALIDES: TypeDocument[] = ['PHOTO', 'ATTESTATION', 'RELEVE_NOTES', 'EXTRAIT_NAISSANCE', 'AUTRE'];
+const TYPES_VALIDES: TypeDocument[] = [
+  'PHOTO',
+  'ATTESTATION',
+  'RELEVE_NOTES',
+  'EXTRAIT_NAISSANCE',
+  'CARNET_VACCINATION',
+  'LIVRET_SCOLAIRE',
+  'AUTRE',
+];
 
 @Injectable()
 export class DocumentsService {

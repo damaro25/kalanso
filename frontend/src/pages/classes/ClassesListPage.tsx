@@ -14,6 +14,7 @@ import {
   createAnneeScolaire,
   activerAnneeScolaire,
   type Effectif,
+  libelleAnnee as libelleSelecteurAnnee,
 } from '../../api/classes';
 import { correspond } from '../../lib/search';
 import { useAuth } from '../../auth/AuthContext';
@@ -148,7 +149,7 @@ export function ClassesListPage() {
               <Group>
                 <Select
                   label="Année scolaire"
-                  data={(annees ?? []).map((a) => ({ value: a.id, label: a.libelle + (a.courante ? ' (courante)' : '') }))}
+                  data={(annees ?? []).map((a) => ({ value: a.id, label: libelleSelecteurAnnee(a) }))}
                   value={anneeClasseId}
                   onChange={setAnneeSelectionnee}
                   w={{ base: '100%', sm: 220 }}
@@ -207,7 +208,14 @@ export function ClassesListPage() {
                 <Stack gap={6} mt="xs">
                   {annees.map((a) => (
                     <Group key={a.id} justify="space-between">
-                      <Text size="sm">{a.libelle}</Text>
+                      <Group gap={6}>
+                        <Text size="sm">{a.libelle}</Text>
+                        {a.cloturee && (
+                          <Badge size="sm" color="gray" variant="light">
+                            Clôturée
+                          </Badge>
+                        )}
+                      </Group>
                       {a.courante ? (
                         <Badge color="kalanso">Courante</Badge>
                       ) : (

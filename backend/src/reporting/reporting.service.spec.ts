@@ -16,7 +16,12 @@ describe('ReportingService.dashboard', () => {
     prisma.facture.findMany.mockImplementation(async ({ where }: any) =>
       where.type === 'INSCRIPTION'
         ? [{ montantPaye: 60000 }, { montantPaye: 55000 }]
-        : [
+        : where.type === 'ECOLAGE'
+          ? [
+              { montantTotal: 3000000, montantPaye: 2000000 },
+              { montantTotal: 1000000, montantPaye: 0 },
+            ]
+          : [
             { montantTotal: 1000000, montantPaye: 400000 },
             { montantTotal: 500000, montantPaye: 0 },
           ],
@@ -69,6 +74,13 @@ describe('ReportingService.dashboard', () => {
       .map((c: any) => c[0].where)
       .find((w: any) => w.statut?.in);
     expect(impayesWhere.statut.in).toEqual(['IMPAYEE', 'PARTIELLE']);
+  });
+
+  it("écolage : montant payé, facturé et pourcentage de paiement (factures non annulées de l'année)", async () => {
+    const r = await service.dashboard('ecole');
+    expect(r.ecolage).toEqual({ paye: 2000000, facture: 4000000, pourcentage: 50 });
+    const where = prisma.facture.findMany.mock.calls.map((c: any) => c[0].where).find((w: any) => w.type === 'ECOLAGE');
+    expect(where.statut).toEqual({ not: 'ANNULEE' });
   });
 
   it("absences du jour : ventilation absents / retards / présents", async () => {

@@ -5,6 +5,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DOSSIER_UPLOADS } from '../admissions/documents.service';
 import { DOSSIER_PHOTOS, TAILLE_MAX_PHOTO } from './photo-upload.config';
 import { genererPlancheCartesPdf, type CarteData } from './carte-pdf.util';
+import { genererCartesRetraitPdf, type CarteRetraitData, type EnteteRetrait } from './carte-retrait-pdf.util';
+import { estMaternelle, formaterFiliation, formaterTelephone, telephoneContact } from './filiation-carte.util';
 
 export type SourcePhoto = 'ELEVE' | 'ADMISSION';
 type MimePhoto = 'image/jpeg' | 'image/png';
@@ -188,7 +190,7 @@ export class CartesScolairesService {
     });
     const inscriptions = await this.prisma.inscription.findMany({
       where: { ecoleId, classeId, anneeScolaireId: classe.anneeScolaireId, statut: 'EN_COURS', eleve: { actif: true } },
-      include: { eleve: true },
+      include: { eleve: { include: { parentsLiens: { include: { parentTuteur: true } } } } },
     });
     const eleves = inscriptions
       .map((i: { eleve: any }) => i.eleve)
@@ -230,6 +232,7 @@ export class CartesScolairesService {
         niveau: classe.niveau.nom,
         photo: trouvee ? await this.lireFichier(trouvee.chemin) : null,
         codeQr: e.matricule ?? e.id,
+        filiation: formaterFiliation(e.parentsLiens),
       });
     }
     return cartes;
@@ -249,6 +252,7 @@ export class CartesScolairesService {
     const eleve = await this.prisma.eleve.findFirstOrThrow({
       where: { id: eleveId, ecoleId },
       include: {
+        parentsLiens: { include: { parentTuteur: true } },
         inscriptions: {
           where: { anneeScolaireId: annee.id, statut: 'EN_COURS' },
           include: { classe: { include: { niveau: true } } },
@@ -263,5 +267,91 @@ export class CartesScolairesService {
     const cartes = await this.construireCartes(ecoleId, [eleve], inscription.classe);
     const pdf = await genererPlancheCartesPdf(ecole, annee.libelle, cartes);
     return { pdf, nomFichier: `carte-scolaire-${slug(`${eleve.prenom} ${eleve.nom}`)}.pdf` };
+  }
+
+  // ── Cartes de retrait (maternelle) ─────────────────────────────────────────────────────────
+
+  // Classes de l'année en cours, la maternelle signalée (proposée par défaut à l'écran).
+  async classesRetrait(ecoleId: string) {
+    const annee = await this.resoudreAnnee(ecoleId);
+    const classes = await this.prisma.classe.findMany({
+      where: { ecoleId, anneeScolaireId: annee.id, actif: true },
+      include: { niveau: true, _count: { select: { inscriptions: { where: { statut: 'EN_COURS' } } } } },
+      orderBy: [{ niveau: { ordre: 'asc' } }, { nom: 'asc' }],
+    });
+    return {
+      anneeScolaire: { id: annee.id, libelle: annee.libelle },
+      classes: classes.map((c) => ({
+        id: c.id,
+        nom: c.nom,
+        niveau: c.niveau.nom,
+        maternelle: estMaternelle(c.niveau),
+        effectif: c._count.inscriptions,
+      })),
+    };
+  }
+
+  private async enteteRetrait(ecoleId: string): Promise<EnteteRetrait> {
+    const ecole = await this.prisma.ecole.findUniqueOrThrow({ where: { id: ecoleId } });
+    return {
+      ecole: ecole.nom,
+      ministere: ecole.carteRetraitMinistere?.trim() || 'MEN-A',
+      dev: ecole.carteRetraitDev?.trim() || 'Conakry',
+      dce: ecole.carteRetraitDce?.trim() || 'Matoto',
+      signataire: ecole.carteRetraitSignataire?.trim() || 'La Coordinatrice',
+    };
+  }
+
+  // Élèves inscrits cette année (une classe, ou une liste d'élèves), triés par nom, avec niveau et parents.
+  private async elevesRetrait(ecoleId: string, filtre: { classeId?: string; eleveIds?: string[] }): Promise<CarteRetraitData[]> {
+    const annee = await this.resoudreAnnee(ecoleId);
+    const inscriptions = await this.prisma.inscription.findMany({
+      where: {
+        ecoleId,
+        anneeScolaireId: annee.id,
+        statut: 'EN_COURS',
+        eleve: { actif: true },
+        ...(filtre.classeId ? { classeId: filtre.classeId } : {}),
+        ...(filtre.eleveIds ? { eleveId: { in: filtre.eleveIds } } : {}),
+      },
+      include: {
+        classe: { include: { niveau: true } },
+        eleve: { include: { parentsLiens: { include: { parentTuteur: true } } } },
+      },
+    });
+    return inscriptions
+      .sort((a, b) => `${a.eleve.nom} ${a.eleve.prenom}`.localeCompare(`${b.eleve.nom} ${b.eleve.prenom}`, 'fr'))
+      .map((i) => ({
+        matricule: i.eleve.matricule,
+        niveau: i.classe.niveau.nom,
+        prenom: i.eleve.prenom,
+        nom: i.eleve.nom,
+        dateNaissance: i.eleve.dateNaissance,
+        lieuNaissance: i.eleve.lieuNaissance,
+        filiation: formaterFiliation(i.eleve.parentsLiens),
+        telephone: formaterTelephone(telephoneContact(i.eleve.parentsLiens)),
+        adresse: i.eleve.adresse,
+      }));
+  }
+
+  async pdfRetraitClasse(ecoleId: string, classeId: string): Promise<{ pdf: Buffer; nomFichier: string }> {
+    const classe = await this.prisma.classe.findFirst({ where: { id: classeId, ecoleId } });
+    if (!classe) throw new NotFoundException('Classe introuvable');
+    const cartes = await this.elevesRetrait(ecoleId, { classeId });
+    if (cartes.length === 0) throw new BadRequestException('Aucun élève inscrit dans cette classe');
+    const pdf = await genererCartesRetraitPdf(await this.enteteRetrait(ecoleId), cartes);
+    return { pdf, nomFichier: `cartes-retrait-${slug(classe.nom)}.pdf` };
+  }
+
+  async pdfRetraitEleves(ecoleId: string, eleveIds: string[]): Promise<{ pdf: Buffer; nomFichier: string }> {
+    const ids = [...new Set(eleveIds.filter(Boolean))];
+    if (ids.length === 0) throw new BadRequestException('Choisissez au moins un élève');
+    const cartes = await this.elevesRetrait(ecoleId, { eleveIds: ids });
+    if (cartes.length === 0) {
+      throw new BadRequestException("Aucun de ces élèves n'est inscrit dans une classe cette année");
+    }
+    const pdf = await genererCartesRetraitPdf(await this.enteteRetrait(ecoleId), cartes);
+    const nomFichier = cartes.length === 1 ? `carte-retrait-${slug(`${cartes[0].prenom} ${cartes[0].nom}`)}.pdf` : 'cartes-retrait.pdf';
+    return { pdf, nomFichier };
   }
 }

@@ -51,6 +51,7 @@ describe('ReportingController : tableau de bord', () => {
     totalPersonnel: 3,
     fraisInscription: { encaisse: 290000 },
     impayes: { nombre: 6, montant: 3860000 },
+    ecolage: { paye: 2000000, facture: 4000000, pourcentage: 50 },
     absencesAujourdhui: { absents: 0, retards: 0, presents: 0 },
   };
   const controleur = new ReportingController({ dashboard: jest.fn().mockResolvedValue(complet) } as never, {} as never, perimetreLibre() as never);
@@ -64,6 +65,7 @@ describe('ReportingController : tableau de bord', () => {
     const resultat = (await comme(role)) as Record<string, unknown>;
     expect(resultat).not.toHaveProperty('fraisInscription');
     expect(resultat).not.toHaveProperty('impayes');
+    expect(resultat).not.toHaveProperty('ecolage');
     expect(resultat).toMatchObject({ totalEleves: 5, totalPersonnel: 3, absencesAujourdhui: complet.absencesAujourdhui });
   });
 
@@ -129,12 +131,12 @@ describe("ReportingController : périmètre de l'enseignant", () => {
   });
 
   it("la liste d'élèves exportée est limitée à ses classes", async () => {
-    await controleur.exportEleves(user, undefined, res());
-    expect(exports.elevesXlsx).toHaveBeenCalledWith('e1', undefined, ['c1', 'c2']);
+    await controleur.exportEleves(user, undefined, undefined, res());
+    expect(exports.elevesXlsx).toHaveBeenCalledWith('e1', undefined, ['c1', 'c2'], undefined);
   });
 
   it("l'export d'une classe précise exige qu'elle fasse partie de ses classes", async () => {
-    await controleur.exportEleves(user, 'c1', res());
+    await controleur.exportEleves(user, 'c1', undefined, res());
     expect(perimetre.exigerClasse).toHaveBeenCalledWith(user, 'c1');
   });
 

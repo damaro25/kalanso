@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Res,
   UploadedFile,
   UseGuards,
@@ -68,6 +69,27 @@ export class CartesScolairesController {
   @Get('cartes-scolaires/classe/:classeId')
   apercuClasse(@CurrentUser() user: JwtPayloadUser, @Param('classeId') classeId: string) {
     return this.service.apercuClasse(user.ecoleId, classeId);
+  }
+
+  // ── Cartes de retrait (maternelle) ──
+  @Get('cartes-retrait/classes')
+  classesRetrait(@CurrentUser() user: JwtPayloadUser) {
+    return this.service.classesRetrait(user.ecoleId);
+  }
+
+  @Get('cartes-retrait/classe/:classeId/pdf')
+  async pdfRetraitClasse(@CurrentUser() user: JwtPayloadUser, @Param('classeId') classeId: string, @Res() res: Response) {
+    const { pdf, nomFichier } = await this.service.pdfRetraitClasse(user.ecoleId, classeId);
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${nomFichier}"` });
+    res.send(pdf);
+  }
+
+  // Élèves choisis : ?eleves=id1,id2
+  @Get('cartes-retrait/eleves/pdf')
+  async pdfRetraitEleves(@CurrentUser() user: JwtPayloadUser, @Query('eleves') eleves: string | undefined, @Res() res: Response) {
+    const { pdf, nomFichier } = await this.service.pdfRetraitEleves(user.ecoleId, (eleves ?? '').split(','));
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${nomFichier}"` });
+    res.send(pdf);
   }
 
   @Get('cartes-scolaires/classe/:classeId/pdf')

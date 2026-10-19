@@ -6,8 +6,17 @@ import { genererBulletinPdf } from '../notes/bulletin-pdf.util';
 import { genererEmploiDuTempsPdf, type CreneauPdfData } from '../emploi-du-temps/emploi-du-temps-pdf.util';
 import { PaieService } from '../paie/paie.service';
 import { genererBulletinPaiePdf } from '../paie/bulletin-paie-pdf.util';
+import type { Regime } from '../generated/prisma/enums';
+
 import { LogistiqueService } from '../logistique/logistique.service';
 import { ParcoursService } from '../parcours/parcours.service';
+
+const LIBELLES_REGIME: Record<string, string> = {
+  EXTERNAT: 'Externat',
+  SEMI_INTERNAT: 'Semi-internat',
+  INTERNAT: 'Internat',
+  PENSIONNAT: 'Pensionnat',
+};
 
 const LABELS_DECISION: Record<string, string> = {
   ADMIS: 'Passage classe sup.',
@@ -70,7 +79,7 @@ export class ExportService {
   }
 
   // `classeIds` non nul : périmètre d'un enseignant, seuls les élèves de ses classes sont exportés.
-  async elevesXlsx(ecoleId: string, classeId?: string, classeIds: string[] | null = null): Promise<Buffer> {
+  async elevesXlsx(ecoleId: string, classeId?: string, classeIds: string[] | null = null, regime?: Regime): Promise<Buffer> {
     const anneeCourante = await this.resoudreAnnee(ecoleId);
     const inscriptions = await this.prisma.inscription.findMany({
       where: {
@@ -78,6 +87,7 @@ export class ExportService {
         anneeScolaireId: anneeCourante.id,
         statut: 'EN_COURS',
         ...(classeId ? { classeId } : classeIds ? { classeId: { in: classeIds } } : {}),
+        ...(regime ? { regime } : {}),
       },
       include: { eleve: true, classe: true },
       orderBy: { eleve: { nom: 'asc' } },
@@ -91,6 +101,7 @@ export class ExportService {
       { header: 'Prénom', key: 'prenom', width: 20 },
       { header: 'Genre', key: 'genre', width: 10 },
       { header: 'Classe', key: 'classe', width: 15 },
+      { header: 'Régime', key: 'regime', width: 15 },
     ];
     for (const i of inscriptions) {
       sheet.addRow({
@@ -99,6 +110,7 @@ export class ExportService {
         prenom: i.eleve.prenom,
         genre: i.eleve.genre,
         classe: i.classe.nom,
+        regime: LIBELLES_REGIME[i.regime] ?? i.regime,
       });
     }
 
@@ -135,6 +147,71 @@ export class ExportService {
     }
 
     return workbook.xlsx.writeBuffer() as unknown as Promise<Buffer>;
+  }
+
+  // Impayés d'écolage par tranche et par classe (année en cours) : une feuille par classe, une ligne par élève qui
+  // doit encore quelque chose, le reste de chaque tranche et le total. Filtres : une classe, une tranche (1, 2, 3).
+  async impayesTranchesXlsx(ecoleId: string, filtres: { classeId?: string; tranche?: number } = {}): Promise<Buffer> {
+    const annee = await this.resoudreAnnee(ecoleId);
+    const inscriptions = await this.prisma.inscription.findMany({
+      where: { ecoleId, anneeScolaireId: annee.id, statut: 'EN_COURS', ...(filtres.classeId ? { classeId: filtres.classeId } : {}) },
+      include: { eleve: true, classe: { include: { niveau: true } } },
+    });
+    const factures = await this.prisma.facture.findMany({
+      where: { ecoleId, anneeScolaireId: annee.id, type: 'ECOLAGE', statut: { not: 'ANNULEE' }, eleveId: { in: inscriptions.map((i) => i.eleveId) } },
+      select: { eleveId: true, libelle: true, montantTotal: true, montantPaye: true },
+    });
+    const numero = (libelle: string) => Number(/Tranche\s*(\d+)/i.exec(libelle)?.[1] ?? 0);
+    const restes = new Map<string, number[]>(); // élève -> reste des tranches 1..3
+    for (const f of factures) {
+      const n = numero(f.libelle);
+      if (n < 1 || n > 3) continue;
+      const r = restes.get(f.eleveId) ?? [0, 0, 0];
+      r[n - 1] += Math.max(0, Number(f.montantTotal) - Number(f.montantPaye));
+      restes.set(f.eleveId, r);
+    }
+    const LIBELLES_REGIME: Record<string, string> = { EXTERNAT: 'Externat', SEMI_INTERNAT: 'Semi-internat', INTERNAT: 'Internat', PENSIONNAT: 'Pensionnat' };
+
+    // Classes dans l'ordre des niveaux, élèves par nom
+    const parClasse = new Map<string, typeof inscriptions>();
+    for (const i of [...inscriptions].sort(
+      (a, b) => a.classe.niveau.ordre - b.classe.niveau.ordre || a.classe.nom.localeCompare(b.classe.nom) || a.eleve.nom.localeCompare(b.eleve.nom),
+    )) {
+      parClasse.set(i.classeId, [...(parClasse.get(i.classeId) ?? []), i]);
+    }
+
+    const wb = new ExcelJS.Workbook();
+    const tranches = filtres.tranche ? [filtres.tranche] : [1, 2, 3];
+    const nomsFeuilles = new Set<string>();
+    for (const liste of parClasse.values()) {
+      const classe = liste[0].classe;
+      const lignes = liste
+        .map((i) => ({ i, r: restes.get(i.eleveId) ?? [0, 0, 0] }))
+        .filter(({ r }) => tranches.some((t) => r[t - 1] > 0));
+      if (!lignes.length) continue;
+      let nom = classe.nom.replace(/[\\/?*[\]:]/g, '-').slice(0, 31);
+      while (nomsFeuilles.has(nom)) nom = `${nom.slice(0, 28)}-${nomsFeuilles.size}`;
+      nomsFeuilles.add(nom);
+      const ws = wb.addWorksheet(nom);
+      ws.addRow([`Impayés d'écolage : ${classe.nom} (${classe.niveau.nom}), ${annee.libelle}${filtres.tranche ? `, tranche ${filtres.tranche}` : ''}`]).font = { bold: true, size: 12 };
+      ws.addRow([]);
+      const entete = ws.addRow(['Matricule', 'Nom', 'Prénom', 'Régime', ...tranches.map((t) => `Tranche ${t}`), ...(tranches.length > 1 ? ['Total'] : [])]);
+      entete.font = { bold: true };
+      [14, 18, 20, 14, 15, 15, 15, 15].forEach((l, k) => (ws.getColumn(k + 1).width = l));
+      const totaux = tranches.map(() => 0);
+      for (const { i, r } of lignes) {
+        const valeurs = tranches.map((t) => r[t - 1]);
+        valeurs.forEach((v, k) => (totaux[k] += v));
+        ws.addRow([i.eleve.matricule ?? '', i.eleve.nom, i.eleve.prenom, LIBELLES_REGIME[i.regime] ?? i.regime, ...valeurs, ...(tranches.length > 1 ? [valeurs.reduce((a, v) => a + v, 0)] : [])]);
+      }
+      const total = ws.addRow(['', 'Total', `${lignes.length} élève(s)`, '', ...totaux, ...(tranches.length > 1 ? [totaux.reduce((a, v) => a + v, 0)] : [])]);
+      total.font = { bold: true };
+      ws.eachRow((row, n) => {
+        if (n > 3) for (let c = 5; c <= 5 + tranches.length; c++) row.getCell(c).numFmt = '#,##0';
+      });
+    }
+    if (!wb.worksheets.length) wb.addWorksheet('Impayés').addRow(['Aucun impayé pour ces critères.']);
+    return wb.xlsx.writeBuffer() as unknown as Promise<Buffer>;
   }
 
   async facturesXlsx(ecoleId: string): Promise<Buffer> {
