@@ -17,6 +17,10 @@ import {
   IconMessageCircle,
   IconReportMoney,
   IconReceipt,
+  IconCalculator,
+  IconLock,
+  IconShieldCheck,
+  IconSchool,
   IconTags,
   IconCash,
   IconBriefcase,
@@ -26,11 +30,23 @@ import {
   IconFileSpreadsheet,
   IconUserCheck,
   IconUserCog,
+  IconSettings,
   IconLogout,
 } from '@tabler/icons-react';
 import { useAuth } from '../auth/AuthContext';
+import { useNomEcole, useLogoEcole, logoParDefaut } from '../lib/nomEcole';
 import { ROLE_LABELS, type Role } from '../lib/roles';
 import { SyncStatusBanner } from '../offline/SyncStatusBanner';
+import { MODULES_DESACTIVES } from '../lib/modules';
+
+// Entrées de menu des modules désactivés (voir lib/modules.ts)
+const ROUTES_DESACTIVEES = [
+  ...(MODULES_DESACTIVES.admissions ? ['/admissions'] : []),
+  ...(MODULES_DESACTIVES.bilanFinancier ? ['/finance'] : []),
+  ...(MODULES_DESACTIVES.assurance ? ['/finances/assurance'] : []),
+  ...(MODULES_DESACTIVES.paiementInscription ? ['/finances/inscriptions'] : []),
+  ...(MODULES_DESACTIVES.paiementAssurance ? ['/finances/paiement-assurance'] : []),
+];
 
 type IconComponent = ComponentType<{ size?: number; stroke?: number }>;
 
@@ -92,8 +108,14 @@ const GROUPS: MenuGroup[] = [
     items: [
       { label: 'Bilan financier', to: '/finance', icon: IconReportMoney, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
       { label: 'Factures', to: '/finances/factures', icon: IconReceipt, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
+      { label: 'Impayés par tranche', to: '/finances/impayes-tranches', icon: IconFileSpreadsheet, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
       { label: 'Paiement inscription/réinscription', to: '/finances/inscriptions', icon: IconUserCheck, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
+      { label: 'Paiement T-shirt', to: '/finances/paiement-assurance', icon: IconShieldCheck, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
+      { label: 'Paiement formations supplémentaires', to: '/finances/paiement-formations', icon: IconSchool, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
       { label: 'Bordereau journalier', to: '/finances/bordereau', icon: IconFileSpreadsheet, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
+      { label: 'Budget de trésorerie', to: '/finances/budget', icon: IconCalculator, roles: ['FONDATEUR'] },
+      { label: 'T-shirt', to: '/finances/assurance', icon: IconShieldCheck, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
+      { label: "Clôture d'année", to: '/finances/cloture', icon: IconLock, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
       { label: 'Tarifs', to: '/finances/tarifs', icon: IconTags, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
       { label: 'Paie', to: '/paie', icon: IconCash, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
     ],
@@ -102,6 +124,7 @@ const GROUPS: MenuGroup[] = [
     label: 'Établissement',
     icon: IconBriefcase,
     items: [
+      { label: 'Configuration', to: '/configuration', icon: IconSettings, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'] },
       { label: 'Personnel', to: '/personnel', icon: IconBriefcase, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT'] },
       { label: 'Utilisateurs', to: '/utilisateurs', icon: IconUserCog, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT'] },
       { label: 'Niveaux', to: '/niveaux', icon: IconStairs, roles: ['FONDATEUR', 'CHEF_ETABLISSEMENT'] },
@@ -123,6 +146,8 @@ function estActif(pathname: string, to: string) {
 export function AppShell() {
   const [opened, { toggle, close }] = useDisclosure();
   const { user, logout } = useAuth();
+  const nomEcole = useNomEcole();
+  const logoEcole = useLogoEcole();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -133,7 +158,9 @@ export function AppShell() {
 
   const visibleGroups = GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => !item.roles || (user && item.roles.includes(user.role))),
+    items: group.items.filter(
+      (item) => !ROUTES_DESACTIVEES.includes(item.to) && (!item.roles || (user && item.roles.includes(user.role))),
+    ),
   })).filter((group) => group.items.length > 0);
 
   return (
@@ -147,9 +174,13 @@ export function AppShell() {
         <Group h="100%" px="md" justify="space-between" wrap="nowrap">
           <Group wrap="nowrap">
             <Burger opened={opened} onClick={toggle} hiddenFrom="md" size="sm" aria-label="Ouvrir le menu" />
-            <Text fw={700} fz={{ base: 'md', sm: 'lg' }} c="kalanso.7" truncate>
-              La cible du formateur
-            </Text>
+            {/* Logo de l'école (bandeau) ; le nom reste lisible par les lecteurs d'écran */}
+            <img
+              src={logoEcole}
+              alt={nomEcole}
+              onError={(e) => (e.currentTarget.src = logoParDefaut)}
+              style={{ height: 44, maxWidth: '58vw', objectFit: 'contain', display: 'block' }}
+            />
           </Group>
           <Group wrap="nowrap" gap="xs">
             {user && (

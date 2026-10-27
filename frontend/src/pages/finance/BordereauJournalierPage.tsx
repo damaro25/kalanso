@@ -3,8 +3,8 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Badge, Button, Group, Paper, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconDownload, IconEye } from '@tabler/icons-react';
-import { fetchBordereauJournalier, telechargerBordereauJournalier, type TypeOperation } from '../../api/finance';
-import { ouvrirFacturePdf, ouvrirRecu } from '../../api/finances';
+import { fetchBordereauJournalier, telechargerBordereauJournalier } from '../../api/finance';
+import { ouvrirRecu } from '../../api/finances';
 
 function fmt(n: number) {
   return n.toLocaleString('fr-FR');
@@ -15,19 +15,24 @@ function dateFr(iso: string) {
   return iso.split('-').reverse().join('/');
 }
 
-const COULEURS_OPERATION: Record<TypeOperation, string> = {
-  Inscription: 'teal',
-  Réinscription: 'cyan',
-  Écolage: 'blue',
-  'Trimestre 1': 'indigo',
-  'Trimestre 2': 'indigo',
-  'Trimestre 3': 'indigo',
-  Autre: 'gray',
-};
+// Couleurs de la feuille papier
+const BLEU = '#2E75B6';
+const BLEU_CLAIR = '#DDEBF7';
+const CASE_TOTAL = { border: '1.5px solid #000' };
 
-// Bordereau journalier : les encaissements d'un jour, une ligne par reçu (paiement), filtrables par
-// niveau. Chaque ligne donne le N° de reçu, le N° de la facture réglée et le type d'opération
-// (inscription, réinscription, écolage, trimestre 1, 2, 3). Export Excel au format de la feuille papier.
+const COLONNES = [
+  'N°', 'Classe', 'Reçu', 'Matricule', 'Prénoms & Nom', 'Frais inscription', 'Type inscription', 'T-shirt',
+  'Total frais insc + Ass', 'Jour versement', 'Frais études payés', 'Formations', 'Total payé', 'Observation',
+];
+
+// Case vide pour un montant nul, comme sur la feuille papier
+function montant(n: number) {
+  return n ? fmt(n) : '';
+}
+
+// Bordereau journalier : les encaissements d'un jour, une ligne par élève (ses versements du jour cumulés),
+// filtrables par niveau, présentés comme la feuille papier de l'école (frais d'inscription, assurance,
+// frais d'études, formations supplémentaires, total payé, signatures). Export Excel au même format.
 export function BordereauJournalierPage() {
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [niveauId, setNiveauId] = useState<string | null>(null);
@@ -37,11 +42,12 @@ export function BordereauJournalierPage() {
   const dateValide = /^\d{4}-\d{2}-\d{2}$/.test(date) && date >= '2000-01-01' && date <= '2100-12-31';
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['bordereau-journalier', date, niveauId],
+    queryKey: ['bordereau-journalier', 'feuille-papier-formations', date, niveauId], // 'feuille-papier' : écarte l'ancien format resté en cache hors ligne
     queryFn: () => fetchBordereauJournalier({ date, niveauId: niveauId ?? undefined }),
     enabled: dateValide,
     placeholderData: keepPreviousData, // pas de clignotement quand on change de filtre
   });
+  const nbRecus = data?.lignes.reduce((n, l) => n + l.numerosRecu.length, 0) ?? 0;
 
   async function telecharger() {
     setTelechargement(true);
@@ -104,88 +110,131 @@ export function BordereauJournalierPage() {
 
       {data && (
         <Paper withBorder p="md">
-          <Group justify="space-between" mb="sm">
-            <Title order={4}>Bordereau du {dateFr(data.date)}</Title>
+          {/* En-tête de la feuille papier : l'école à gauche, la République et le total du jour à droite */}
+          <Group justify="space-between" align="flex-start" mb="md" wrap="nowrap">
+            <Text fw={700} size="xl" c={BLEU} tt="uppercase">
+              {data.ecole.nom}
+            </Text>
+            <Stack gap={0} align="center">
+              <Text fw={700}>RÉPUBLIQUE DE GUINÉE</Text>
+              <Text fs="italic" size="sm">
+                Travail-Justice-Solidarité
+              </Text>
+              <Text fw={700} mt={4} px="sm" bg="yellow.4" c="black" style={{ border: '1px solid #000' }}>
+                {fmt(data.totaux.totalPaye)}
+              </Text>
+            </Stack>
+          </Group>
+
+          <Group justify="center" gap="sm" mb="sm">
+            <Title order={3}>BORDEREAU JOURNALIER</Title>
             <Badge variant="light" size="lg">
-              {data.lignes.length} reçu{data.lignes.length > 1 ? 's' : ''}
+              {data.lignes.length} élève{data.lignes.length > 1 ? 's' : ''} · {nbRecus} reçu{nbRecus > 1 ? 's' : ''}
             </Badge>
           </Group>
 
           {data.lignes.length === 0 ? (
-            <Text c="dimmed">
+            <Text c="dimmed" ta="center">
               Aucun paiement encaissé le {dateFr(data.date)}
               {niveauId ? ' pour ce niveau' : ''}.
             </Text>
           ) : (
-            <Table.ScrollContainer minWidth={1150}>
-              <Table striped withColumnBorders verticalSpacing={4}>
+            <Table.ScrollContainer minWidth={1250}>
+              <Table withColumnBorders withTableBorder verticalSpacing={4} fz="sm">
                 <Table.Thead>
                   <Table.Tr>
-                    <Table.Th>N°</Table.Th>
-                    <Table.Th>Classe</Table.Th>
-                    <Table.Th>Reçu N°</Table.Th>
-                    <Table.Th>Facture N°</Table.Th>
-                    <Table.Th>Matricule</Table.Th>
-                    <Table.Th>Prénoms & Nom</Table.Th>
-                    <Table.Th>Type d'opération</Table.Th>
-                    <Table.Th>Jour du versement</Table.Th>
-                    <Table.Th ta="right">Frais d'études payés</Table.Th>
-                    <Table.Th ta="right">Total payé</Table.Th>
-                    <Table.Th>Observation</Table.Th>
+                    {COLONNES.map((c) => (
+                      <Table.Th key={c} bg={BLEU} c="white" ta="center" style={{ verticalAlign: 'middle' }}>
+                        {c}
+                      </Table.Th>
+                    ))}
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
                   {data.lignes.map((l, i) => (
-                    <Table.Tr key={l.numeroRecu}>
-                      <Table.Td>{i + 1}</Table.Td>
-                      <Table.Td>{l.classe}</Table.Td>
-                      <Table.Td>
-                        <Group gap={4} wrap="nowrap">
-                          <Text size="xs" ff="monospace">
-                            {l.numeroRecu}
-                          </Text>
-                          <Button size="compact-xs" variant="subtle" aria-label="Voir le reçu" onClick={() => ouvrirRecu(l.numeroRecu)}>
-                            <IconEye size={14} stroke={1.5} />
-                          </Button>
-                        </Group>
+                    <Table.Tr key={l.eleveId} bg={i % 2 === 1 ? BLEU_CLAIR : undefined}>
+                      <Table.Td ta="center" fw={700}>
+                        {i + 1}
+                      </Table.Td>
+                      <Table.Td ta="center" fw={700}>
+                        {l.classe}
                       </Table.Td>
                       <Table.Td>
-                        <Group gap={4} wrap="nowrap">
-                          <Text size="xs" ff="monospace">
-                            {l.numeroFacture}
-                          </Text>
-                          <Button size="compact-xs" variant="subtle" aria-label="Voir la facture" onClick={() => ouvrirFacturePdf(l.numeroFacture)}>
-                            <IconEye size={14} stroke={1.5} />
-                          </Button>
-                        </Group>
+                        <Stack gap={2}>
+                          {l.numerosRecu.map((n, k) => (
+                            <Group key={l.paiementIds[k]} gap={4} wrap="nowrap" justify="center">
+                              <Text size="xs" ff="monospace">
+                                {n}
+                              </Text>
+                              <Button
+                                size="compact-xs"
+                                variant="subtle"
+                                aria-label="Voir le reçu"
+                                onClick={() => ouvrirRecu(l.paiementIds[k])}
+                              >
+                                <IconEye size={14} stroke={1.5} />
+                              </Button>
+                            </Group>
+                          ))}
+                        </Stack>
                       </Table.Td>
                       <Table.Td>{l.matricule}</Table.Td>
                       <Table.Td>{l.nomComplet}</Table.Td>
-                      <Table.Td>
-                        <Badge variant="light" color={COULEURS_OPERATION[l.typeOperation]}>
-                          {l.typeOperation}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>{dateFr(l.date)}</Table.Td>
-                      <Table.Td ta="right">{l.fraisEtudes > 0 ? fmt(l.fraisEtudes) : ''}</Table.Td>
-                      <Table.Td ta="right" fw={600}>
-                        {fmt(l.totalPaye)}
-                      </Table.Td>
+                      <Table.Td ta="right">{montant(l.fraisInscription)}</Table.Td>
+                      <Table.Td>{l.typeInscription}</Table.Td>
+                      <Table.Td ta="right">{montant(l.assurance)}</Table.Td>
+                      <Table.Td ta="right">{montant(l.totalInscriptionAssurance)}</Table.Td>
+                      <Table.Td ta="center">{dateFr(l.date)}</Table.Td>
+                      <Table.Td ta="right">{montant(l.fraisEtudes)}</Table.Td>
+                      <Table.Td ta="right">{montant(l.fraisFormations ?? 0)}</Table.Td>
+                      <Table.Td ta="right">{fmt(l.totalPaye)}</Table.Td>
                       <Table.Td>{l.observation}</Table.Td>
                     </Table.Tr>
                   ))}
                   <Table.Tr fw={700}>
-                    <Table.Td colSpan={8} ta="right">
+                    <Table.Td colSpan={5} ta="right">
                       Totaux
                     </Table.Td>
-                    <Table.Td ta="right">{fmt(data.totaux.fraisEtudes)}</Table.Td>
-                    <Table.Td ta="right">{fmt(data.totaux.totalPaye)} GNF</Table.Td>
+                    <Table.Td ta="right" style={CASE_TOTAL}>
+                      {fmt(data.totaux.fraisInscription)}
+                    </Table.Td>
+                    <Table.Td />
+                    <Table.Td ta="right" style={CASE_TOTAL}>
+                      {fmt(data.totaux.assurance)}
+                    </Table.Td>
+                    <Table.Td ta="right" style={CASE_TOTAL}>
+                      {fmt(data.totaux.totalInscriptionAssurance)}
+                    </Table.Td>
+                    <Table.Td />
+                    <Table.Td ta="right" style={CASE_TOTAL}>
+                      {fmt(data.totaux.fraisEtudes)}
+                    </Table.Td>
+                    <Table.Td ta="right" style={CASE_TOTAL}>
+                      {fmt(data.totaux.fraisFormations ?? 0)}
+                    </Table.Td>
+                    <Table.Td ta="right" style={CASE_TOTAL}>
+                      {fmt(data.totaux.totalPaye)}
+                    </Table.Td>
                     <Table.Td />
                   </Table.Tr>
                 </Table.Tbody>
               </Table>
             </Table.ScrollContainer>
           )}
+
+          <Text ta="right" fw={700} fs="italic" mt="md">
+            {data.ecole.ville ? `${data.ecole.ville}, le` : 'Le'} {dateFr(data.date)}
+          </Text>
+          <Group justify="space-between" mt="md" px="xl" align="flex-start">
+            <Stack gap={40} align="center">
+              <Text fw={700}>Directeur Général</Text>
+              <Text>{data.ecole.nomDirecteur ?? ''}</Text>
+            </Stack>
+            <Stack gap={40} align="center">
+              <Text fw={700}>Percepteur-Comptable</Text>
+              <Text>{data.ecole.nomComptable ?? ''}</Text>
+            </Stack>
+          </Group>
         </Paper>
       )}
     </Stack>

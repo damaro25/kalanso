@@ -4,6 +4,7 @@ import { Table, Title, Group, Paper, TextInput, PasswordInput, Select, Button, S
 import { notifications } from '@mantine/notifications';
 import { confirmerSuppression } from '../../lib/confirm';
 import { ROLE_LABELS, type Role } from '../../lib/roles';
+import { useNomEcole } from '../../lib/nomEcole';
 import {
   fetchUtilisateurs,
   createUtilisateur,
@@ -16,6 +17,7 @@ const OPTIONS_ROLE = (Object.keys(ROLE_LABELS) as Role[]).map((value) => ({ valu
 
 export function UtilisateursPage() {
   const queryClient = useQueryClient();
+  const nomEcole = useNomEcole();
   const { data: utilisateurs, isLoading } = useQuery({ queryKey: ['utilisateurs'], queryFn: fetchUtilisateurs });
   const { data: personnel } = useQuery({ queryKey: ['personnel'], queryFn: fetchPersonnel });
 
@@ -115,7 +117,7 @@ export function UtilisateursPage() {
       <Title order={2}>Utilisateurs</Title>
       <Text size="sm" c="dimmed">
         Gérez les comptes du personnel administratif (fondateur, chef d'établissement, secrétaire, comptable,
-        enseignant) qui accèdent à La cible du formateur.
+        enseignant) qui accèdent à {nomEcole}.
       </Text>
 
       <Paper withBorder p="md">

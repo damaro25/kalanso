@@ -42,21 +42,22 @@ describe('ExportService (exports Excel)', () => {
     it("exporte les élèves inscrits EN_COURS de l'année courante, filtrables par classe", async () => {
       prisma.anneeScolaire.findFirst.mockResolvedValue({ id: 'a1' });
       prisma.inscription.findMany.mockResolvedValue([
-        { eleve: { matricule: 'M1', nom: 'Diallo', prenom: 'Fatou', genre: 'F' }, classe: { nom: '5eme A' } },
-        { eleve: { matricule: null, nom: 'Bah', prenom: 'Moussa', genre: 'M' }, classe: { nom: '5eme A' } },
+        { eleve: { matricule: 'M1', nom: 'Diallo', prenom: 'Fatou', genre: 'F' }, classe: { nom: '5eme A' }, regime: 'INTERNAT' },
+        { eleve: { matricule: null, nom: 'Bah', prenom: 'Moussa', genre: 'M' }, classe: { nom: '5eme A' }, regime: 'INTERNAT' },
       ]);
 
-      const sheet = await lire(await service.elevesXlsx('ecole', 'c1'));
+      const sheet = await lire(await service.elevesXlsx('ecole', 'c1', null, 'INTERNAT' as any));
 
       expect(prisma.inscription.findMany.mock.calls[0][0].where).toEqual({
         ecoleId: 'ecole',
         anneeScolaireId: 'a1',
         statut: 'EN_COURS',
         classeId: 'c1',
+        regime: 'INTERNAT',
       });
       const l = lignes(sheet);
-      expect(l[0]).toEqual(['Matricule', 'Nom', 'Prénom', 'Genre', 'Classe']);
-      expect(l[1]).toEqual(['M1', 'Diallo', 'Fatou', 'F', '5eme A']);
+      expect(l[0]).toEqual(['Matricule', 'Nom', 'Prénom', 'Genre', 'Classe', 'Régime']);
+      expect(l[1]).toEqual(['M1', 'Diallo', 'Fatou', 'F', '5eme A', 'Internat']);
       expect(l[2][1]).toBe('Bah');
     });
   });

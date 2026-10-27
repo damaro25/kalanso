@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { exigerTranchesPrecedentesSoldees } from '../finances/ordre-tranches.util';
 import { MobileMoneyProvider } from './mobile-money-provider';
 import { InitierTransactionDto } from './dto/initier-transaction.dto';
 import { StatutFacture } from '../generated/prisma/enums';
@@ -22,6 +23,7 @@ export class MobileMoneyService {
 
   async initier(ecoleId: string, dto: InitierTransactionDto, initieeParId: string) {
     const facture = await this.prisma.facture.findFirstOrThrow({ where: { id: dto.factureId, ecoleId } });
+    await exigerTranchesPrecedentesSoldees(this.prisma, facture);
 
     const reste = Number(facture.montantTotal) - Number(facture.montantPaye);
     if (reste <= 0) {

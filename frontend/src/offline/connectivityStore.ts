@@ -34,7 +34,8 @@ export const connectivityStore = {
     if (started) return;
     started = true;
     window.addEventListener('online', probe);
-    window.addEventListener('offline', () => setOnline(false));
+    // Sans internet, le serveur peut rester joignable (version bureau : il tourne sur le PC) : on vérifie au lieu de conclure.
+    window.addEventListener('offline', probe);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') probe();
     });

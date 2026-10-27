@@ -1,3 +1,8 @@
+/* Police de toute l'application (voir theme.ts) : aussi pour les éléments hors composants Mantine. */
+body {
+  font-family: Calibri, Carlito, 'Segoe UI', Arial, sans-serif;
+}
+
 /* Écrans tactiles : cibles d'au moins 36 px de haut pour les actions des tableaux
    (« Modifier », « Supprimer ») et les petites icônes, trop serrées au doigt sinon. */
 @media (pointer: coarse) {

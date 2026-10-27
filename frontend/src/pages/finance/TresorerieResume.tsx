@@ -1,5 +1,6 @@
 import { Anchor, Group, Paper, SimpleGrid, Text, Title } from '@mantine/core';
 import { Link } from 'react-router-dom';
+import { MODULES_DESACTIVES } from '../../lib/modules';
 import { Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { TresorerieMensuelle } from '../../api/finance';
 import { libelleCourt } from './mois';
@@ -36,7 +37,7 @@ export function TresorerieResume({ data }: { data: TresorerieMensuelle }) {
     <Paper withBorder p="md">
       <Group justify="space-between" mb="sm">
         <Title order={4}>Trésorerie ({data.anneeScolaire.libelle})</Title>
-        <Anchor component={Link} to="/finance" size="sm">
+        <Anchor component={Link} to={MODULES_DESACTIVES.bilanFinancier ? '/finances/budget' : '/finance'} size="sm">
           Voir le tableau complet
         </Anchor>
       </Group>

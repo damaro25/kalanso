@@ -40,7 +40,7 @@ export function BibliothequePage() {
 
   const { data: resume } = useQuery({ queryKey: ['bibliotheque-resume'], queryFn: fetchResumeBibliotheque });
   const { data: livres, isLoading: chargementLivres } = useQuery({ queryKey: ['bibliotheque-livres'], queryFn: fetchLivres });
-  const { data: eleves } = useQuery({ queryKey: ['eleves'], queryFn: fetchEleves });
+  const { data: eleves } = useQuery({ queryKey: ['eleves'], queryFn: () => fetchEleves() });
 
   function invalider() {
     queryClient.invalidateQueries({ queryKey: ['bibliotheque-resume'] });

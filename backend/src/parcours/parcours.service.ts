@@ -151,6 +151,8 @@ export class ParcoursService {
               eleveId: entry.eleveId,
               classeId: classeDestination.id,
               anneeScolaireId: classeDestination.anneeScolaireId,
+              // L'élève garde son régime d'une année sur l'autre ; il se change sur sa fiche.
+              regime: inscriptionActuelle.regime,
             },
           }),
         ]);

@@ -7,4 +7,11 @@ build/
 .DS_Store
 backend/src/generated/
 backend/uploads/
+# Sauvegardes automatiques de la base avant une clôture d’année (données personnelles)
+backend/sauvegardes/
 frontend/dist/
+# Version bureau : installateurs générés
+desktop/sortie/
+
+# Sauvegardes SQL, scripts de suppression et PDF d’essai (données personnelles des élèves)
+exports/

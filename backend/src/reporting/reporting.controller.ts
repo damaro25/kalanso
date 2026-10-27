@@ -1,11 +1,11 @@
-import { BadRequestException, Controller, Get, Param, Query, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, ParseEnumPipe, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayloadUser } from '../common/decorators/current-user.decorator';
-import { RoleUtilisateur } from '../generated/prisma/enums';
+import { Regime, RoleUtilisateur } from '../generated/prisma/enums';
 import { PerimetreService } from '../common/perimetre/perimetre.service';
 import { ReportingService } from './reporting.service';
 import { ExportService } from './export.service';
@@ -30,7 +30,7 @@ export class ReportingController {
     // Un enseignant ne voit que les effectifs et les absences de ses classes.
     const donnees = await this.reportingService.dashboard(user.ecoleId, await this.perimetre.classesAutorisees(user));
     if (ROLES_EXPORT_FINANCE.includes(user.role as RoleUtilisateur)) return donnees;
-    const { fraisInscription: _fraisInscription, impayes: _impayes, ...sansMontants } = donnees;
+    const { fraisInscription: _fraisInscription, impayes: _impayes, ecolage: _ecolage, ...sansMontants } = donnees;
     return sansMontants;
   }
 
@@ -38,10 +38,11 @@ export class ReportingController {
   async exportEleves(
     @CurrentUser() user: JwtPayloadUser,
     @Query('classeId') classeId: string | undefined,
+    @Query('regime', new ParseEnumPipe(Regime, { optional: true })) regime: Regime | undefined,
     @Res() res: Response,
   ) {
     if (classeId) await this.perimetre.exigerClasse(user, classeId);
-    const buffer = await this.exportService.elevesXlsx(user.ecoleId, classeId, await this.perimetre.classesAutorisees(user));
+    const buffer = await this.exportService.elevesXlsx(user.ecoleId, classeId, await this.perimetre.classesAutorisees(user), regime);
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': 'attachment; filename="eleves.xlsx"',
@@ -56,6 +57,26 @@ export class ReportingController {
     res.set({
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': 'attachment; filename="impayes.xlsx"',
+    });
+    res.send(buffer);
+  }
+
+  @Get('export/impayes-tranches.xlsx')
+  @Roles(...ROLES_EXPORT_FINANCE)
+  async exportImpayesTranches(
+    @CurrentUser() user: JwtPayloadUser,
+    @Res() res: Response,
+    @Query('classeId') classeId?: string,
+    @Query('tranche') tranche?: string,
+  ) {
+    const t = Number(tranche);
+    const buffer = await this.exportService.impayesTranchesXlsx(user.ecoleId, {
+      classeId: classeId || undefined,
+      tranche: t >= 1 && t <= 3 ? t : undefined,
+    });
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="impayes-par-tranche.xlsx"',
     });
     res.send(buffer);
   }

@@ -12,6 +12,12 @@ export interface AnneeScolaire {
   id: string;
   libelle: string;
   courante: boolean;
+  cloturee?: boolean; // Finances > Clôture d'année : plus de factures ni de tarifs, paiements d'arriérés possibles
+}
+
+// Libellé d'une année dans les sélecteurs : « 2026-2027 (courante) », « 2025-2026 · clôturée »
+export function libelleAnnee(a: AnneeScolaire): string {
+  return `${a.libelle}${a.courante ? ' (courante)' : ''}${a.cloturee ? ' · clôturée' : ''}`;
 }
 
 export interface Classe {

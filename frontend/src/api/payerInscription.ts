@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { rafraichirFinances } from './budget';
 
 export type EtatInscription = 'A_PAYER' | 'PAYEE' | 'FRAIS_NON_DEFINIS';
 export type TypeInscription = 'INSCRIPTION' | 'REINSCRIPTION';
@@ -77,5 +78,12 @@ export async function fetchInscriptionsAPayer(
 // Le montant n'est pas envoyé : le serveur encaisse celui des frais d'inscription / réinscription du niveau.
 export async function payerInscription(eleveId: string, mode?: string, type?: TypeInscription): Promise<ResultatPaiementInscription> {
   const { data } = await apiClient.post(`/paiements/inscription/${eleveId}`, { ...(mode ? { mode } : {}), ...(type ? { type } : {}) });
+  rafraichirFinances();
+  return data;
+}
+
+// Fenêtre « Payer » : choisir inscription ou réinscription avant tout versement (libellé et montant de la facture suivent)
+export async function changerTypeInscription(eleveId: string, type: TypeInscription): Promise<ApercuInscription> {
+  const { data } = await apiClient.put(`/paiements/inscription/${eleveId}/type`, { type });
   return data;
 }

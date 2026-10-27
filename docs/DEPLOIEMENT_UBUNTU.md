@@ -127,7 +127,25 @@ sudo -u kalanso npx prisma migrate deploy
 
 ### 7.4 Premier démarrage : la première école
 
-La version web n'a pas d'écran d'installation. Le seed crée une école de démonstration et 5 comptes :
+La version web n'a pas d'écran d'installation : l'école et son compte fondateur se créent en base. Deux possibilités.
+
+**Pour une vraie école (recommandé) : le script de préparation.** Il vide la base, puis crée l'école et son compte fondateur avec vos valeurs, sans compte ni donnée de démonstration. Le mot de passe est haché par la base elle-même (bcrypt), comme le fait l'application.
+
+```bash
+# 1. copier le script et renseigner le bloc PARAMÈTRES (nom de l'école, fondateur, mot de passe...)
+sudo cp /opt/kalanso/backend/prisma/scripts/preparer-base-pour-une-ecole.sql /tmp/preparation.sql
+sudo nano /tmp/preparation.sql        # passer v_confirmer à true
+
+# 2. l'exécuter, puis supprimer la copie contenant le mot de passe
+sudo -u postgres psql -v ON_ERROR_STOP=1 -d kalanso -f /tmp/preparation.sql
+sudo shred -u /tmp/preparation.sql
+```
+
+Le script supprime toutes les données de la base : sur un serveur en service, ne le lancez jamais. Il s'arrête sans rien modifier si une valeur est invalide ou si `v_confirmer` est resté à `false`. `v_ecole_id` apparaît dans l'adresse du formulaire public d'admission (`/inscription/<identifiant>`) : choisissez-le avec soin, il ne doit plus changer une fois diffusé aux familles. Connectez-vous ensuite avec le compte fondateur, changez son mot de passe, puis configurez l'école (chapitre 2 du guide d'utilisation : niveaux, année scolaire, classes, tarifs, personnel, comptes). Le script ne touche pas aux fichiers déposés : le dossier `backend/uploads` est vide sur une installation neuve.
+
+Pour vider une base en gardant un compte fondateur existant, utilisez plutôt `backend/prisma/scripts/vider-base-sauf-fondateur.sql`.
+
+**Pour une démonstration ou un essai : le seed.** Il crée une école de démonstration et 5 comptes :
 
 ```bash
 cd /opt/kalanso/backend
@@ -144,9 +162,7 @@ Comptes créés, tous avec le mot de passe `kalanso2026` :
 | Comptable | comptable@kalanso.gn |
 | Enseignant | enseignant@kalanso.gn |
 
-**Dès la première connexion, changez ces mots de passe** (menu Établissement, Utilisateurs, modifier le compte, nouveau mot de passe), et désactivez les comptes dont vous n'avez pas besoin. Le seed crée aussi quelques élèves et classes de démonstration. Le compte enseignant du seed n'est relié à aucune fiche du personnel : il ne voit aucune classe tant qu'on ne l'a pas relié à une fiche d'enseignant (écran Utilisateurs).
-
-Le seed peut être relancé sans danger (il fait des « upsert »), mais ne le relancez pas en production une fois l'école configurée.
+Le seed crée aussi quelques élèves et classes de démonstration, et le compte enseignant n'est relié à aucune fiche du personnel : il ne voit aucune classe tant qu'on ne l'a pas relié à une fiche d'enseignant (écran Utilisateurs). Ne l'utilisez pas pour une école réelle : ces mots de passe sont publics. Il peut être relancé sans danger (il fait des « upsert »), mais pas en production.
 
 ### 7.5 Service systemd
 

@@ -38,7 +38,7 @@ describe('DocumentsService', () => {
       expect(prisma.documentDemande.create).not.toHaveBeenCalled();
     });
 
-    it.each(['PHOTO', 'ATTESTATION', 'RELEVE_NOTES', 'EXTRAIT_NAISSANCE', 'AUTRE'])('accepte le type %s', async (type) => {
+    it.each(['PHOTO', 'ATTESTATION', 'RELEVE_NOTES', 'EXTRAIT_NAISSANCE', 'CARNET_VACCINATION', 'LIVRET_SCOLAIRE', 'AUTRE'])('accepte le type %s', async (type) => {
       prisma.demandeInscription.findUnique.mockResolvedValue({ id: 'd1', statut: 'EN_ATTENTE' });
       await service.ajouter('d1', type, fichier);
       expect(prisma.documentDemande.create.mock.calls[0][0].data).toEqual({

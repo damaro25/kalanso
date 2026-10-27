@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Paper, TextInput, PasswordInput, Button, Title, Alert, Center, Stack } from '@mantine/core';
 import { useAuth } from '../../auth/AuthContext';
+import { useNomEcole, useLogoEcole, logoParDefaut } from '../../lib/nomEcole';
 
 export function LoginPage() {
   const { login } = useAuth();
+  const nomEcole = useNomEcole();
+  const logoEcole = useLogoEcole();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,8 +33,14 @@ export function LoginPage() {
       <Paper shadow="md" p="xl" w={{ base: '100%', sm: 380 }} withBorder>
         <form onSubmit={handleSubmit}>
           <Stack>
-            <Title order={2} c="kalanso.7">
-              La cible du formateur
+            <img
+              src={logoEcole}
+              alt={nomEcole}
+              onError={(e) => (e.currentTarget.src = logoParDefaut)}
+              style={{ width: '100%', maxHeight: 160, objectFit: 'contain', display: 'block' }}
+            />
+            <Title order={3} c="kalanso.7" ta="center">
+              Connexion
             </Title>
             {error && <Alert color="red">{error}</Alert>}
             <TextInput

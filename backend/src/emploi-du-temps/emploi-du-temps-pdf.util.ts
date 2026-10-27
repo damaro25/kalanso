@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { enteteLogo } from '../common/pdf/entete.util';
 
 export interface CreneauPdfData {
   jour: string;
@@ -25,7 +26,7 @@ export function genererEmploiDuTempsPdf(data: EmploiDuTempsData): Promise<Buffer
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(18).text(data.ecoleNom, { align: 'center' });
+    enteteLogo(doc); // logo de l'école à la place de son nom
     doc.moveDown();
     doc.fontSize(14).text(`Emploi du temps — ${data.classeNom} (${data.niveauNom})`, { align: 'center' });
     doc.fontSize(11).text(`Année scolaire : ${data.anneeScolaireLibelle}`, { align: 'center' });

@@ -96,6 +96,32 @@ describe("PaiementsService : payer l'inscription / la réinscription", () => {
     });
   });
 
+  describe('changerTypeInscription (fenêtre Payer)', () => {
+    it("facture « inscription » sans versement : passer en réinscription change son libellé et son montant, sans encaisser", async () => {
+      prisma.facture.findFirst.mockResolvedValue({ id: 'f-adm', libelle: "Frais d'inscription - 5eme A", montantTotal: 75000, montantPaye: 0 });
+      await service.changerTypeInscription('ecole', 'e1', 'REINSCRIPTION');
+      expect(prisma.facture.update.mock.calls[0][0]).toEqual({
+        where: { id: 'f-adm' },
+        data: { libelle: 'Frais de réinscription - 5eme A', montantTotal: 40000 },
+      });
+      expect(prisma.paiement.create).not.toHaveBeenCalled();
+    });
+
+    it("sans facture : la crée au montant du type choisi", async () => {
+      await service.changerTypeInscription('ecole', 'e1', 'REINSCRIPTION');
+      expect(prisma.facture.create.mock.calls[0][0].data).toMatchObject({ libelle: 'Frais de réinscription - 5eme A', montantTotal: 40000, type: 'INSCRIPTION' });
+    });
+
+    it("refuse le changement après un versement, et un type sans frais défini", async () => {
+      prisma.facture.findFirst.mockResolvedValue({ id: 'f-adm', libelle: "Frais d'inscription - 5eme A", montantTotal: 75000, montantPaye: 25000 });
+      await expect(service.changerTypeInscription('ecole', 'e1', 'REINSCRIPTION')).rejects.toThrow('ne peut plus être changé');
+      prisma.facture.findFirst.mockResolvedValue(null);
+      prisma.fraisInscriptionNiveau.findFirst.mockResolvedValue(null);
+      await expect(service.changerTypeInscription('ecole', 'e1', 'REINSCRIPTION')).rejects.toThrow('Aucun frais de réinscription');
+      expect(prisma.facture.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('payerInscription', () => {
     it("sans facture : crée la facture d'inscription au montant du niveau puis encaisse exactement ce montant", async () => {
       const r = await service.payerInscription('ecole', 'e1', 'u1');

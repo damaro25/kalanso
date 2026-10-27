@@ -1,4 +1,5 @@
-import { IsNumber, IsOptional, IsPositive, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsNumber, IsOptional, IsPositive, IsString, ValidateIf } from 'class-validator';
+import { Regime } from '../../generated/prisma/enums';
 
 export class CreateTarifEcolageDto {
   @IsString()
@@ -13,6 +14,15 @@ export class CreateTarifEcolageDto {
   @IsNumber()
   @IsPositive()
   montant: number;
+
+  // Absent : le tarif s'applique à tous les régimes du niveau.
+  @IsOptional()
+  @IsEnum(Regime)
+  regime?: Regime;
+
+  @IsOptional()
+  @IsDateString()
+  dateEcheance?: string;
 }
 
 export class UpdateTarifEcolageDto {
@@ -28,4 +38,16 @@ export class UpdateTarifEcolageDto {
   @IsOptional()
   @IsString()
   anneeScolaireId?: string;
+
+  // null : le tarif s'applique désormais à tous les régimes du niveau.
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsEnum(Regime)
+  regime?: Regime | null;
+
+  // null : retire l'échéance.
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsDateString()
+  dateEcheance?: string | null;
 }

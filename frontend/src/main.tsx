@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { nomEcoleMemorise } from './lib/nomEcole';
 import { MantineProvider } from '@mantine/core';
 import { Notifications, notifications } from '@mantine/notifications';
 import { ModalsProvider } from '@mantine/modals';
@@ -46,7 +47,7 @@ const updateSW = registerSW({
       return;
     }
     notifications.show({
-      title: 'Mise à jour de La cible du formateur',
+      title: `Mise à jour de ${nomEcoleMemorise()}`,
       message: 'Une nouvelle version est disponible, elle va s\'appliquer automatiquement dans quelques secondes.',
       color: 'kalanso',
       autoClose: 6000,

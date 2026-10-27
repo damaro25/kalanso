@@ -8,6 +8,7 @@ import {
   fetchPhotoEleve,
   messageErreurCarte,
   ouvrirCarteEleve,
+  ouvrirCartesRetraitEleves,
   preparerPhoto,
   supprimerPhotoEleve,
   televerserPhotoEleve,
@@ -90,6 +91,10 @@ export function CarteScolaire({ eleveId }: { eleveId: string }) {
     mutationFn: () => ouvrirCarteEleve(eleveId),
     onError: async (e: any) => notifications.show({ message: await messageErreurCarte(e, 'Impossible de générer la carte'), color: 'red' }),
   });
+  const retrait = useMutation({
+    mutationFn: () => ouvrirCartesRetraitEleves([eleveId]),
+    onError: async (e: any) => notifications.show({ message: await messageErreurCarte(e, 'Impossible de générer la carte'), color: 'red' }),
+  });
 
   if (!autorise || !info) return null;
 
@@ -139,6 +144,9 @@ export function CarteScolaire({ eleveId }: { eleveId: string }) {
             )}
             <Button leftSection={<IconId size={16} stroke={1.5} />} disabled={!info.peutGenerer} loading={generer.isPending} onClick={() => generer.mutate()}>
               Générer la carte (PDF)
+            </Button>
+            <Button variant="light" leftSection={<IconId size={16} stroke={1.5} />} disabled={!info.peutGenerer} loading={retrait.isPending} onClick={() => retrait.mutate()}>
+              Carte de retrait
             </Button>
           </Group>
           {!info.peutGenerer && (

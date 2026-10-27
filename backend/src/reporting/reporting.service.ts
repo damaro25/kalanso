@@ -23,7 +23,7 @@ export class ReportingService {
 
     const anneeCourante = await this.resoudreAnnee(ecoleId);
 
-    const [totalEleves, totalPersonnel, facturesInscription, impayes, absencesDuJour] = await Promise.all([
+    const [totalEleves, totalPersonnel, facturesInscription, impayes, absencesDuJour, facturesEcolage] = await Promise.all([
       this.prisma.inscription.count({
         where: { ecoleId, anneeScolaireId: anneeCourante.id, statut: 'EN_COURS', ...(restreint ? { classeId: { in: classeIds } } : {}) },
       }),
@@ -38,10 +38,18 @@ export class ReportingService {
         take: restreint ? 0 : undefined,
       }),
       this.prisma.absence.findMany({ where: { ecoleId, date: aujourdhui, ...(restreint ? { classeId: { in: classeIds } } : {}) } }),
+      // Écolage de l'année (tranches) : payé et facturé, pour le taux de paiement
+      this.prisma.facture.findMany({
+        where: { ecoleId, anneeScolaireId: anneeCourante.id, type: 'ECOLAGE', statut: { not: 'ANNULEE' } },
+        select: { montantTotal: true, montantPaye: true },
+        take: restreint ? 0 : undefined,
+      }),
     ]);
 
     const fraisInscriptionEncaisse = facturesInscription.reduce((acc, f) => acc + Number(f.montantPaye), 0);
     const impayesMontant = impayes.reduce((acc, f) => acc + (Number(f.montantTotal) - Number(f.montantPaye)), 0);
+    const ecolagePaye = facturesEcolage.reduce((acc, f) => acc + Number(f.montantPaye), 0);
+    const ecolageFacture = facturesEcolage.reduce((acc, f) => acc + Number(f.montantTotal), 0);
 
     return {
       anneeScolaire: { id: anneeCourante.id, libelle: anneeCourante.libelle },
@@ -54,6 +62,11 @@ export class ReportingService {
       impayes: {
         nombre: impayes.length,
         montant: impayesMontant,
+      },
+      ecolage: {
+        paye: ecolagePaye,
+        facture: ecolageFacture,
+        pourcentage: ecolageFacture > 0 ? Math.round((ecolagePaye / ecolageFacture) * 100) : 0,
       },
       absencesAujourdhui: {
         absents: absencesDuJour.filter((a) => a.statut === 'ABSENT').length,

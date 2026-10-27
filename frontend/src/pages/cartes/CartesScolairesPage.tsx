@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
-import { Alert, Anchor, Badge, Button, Group, Paper, Select, SimpleGrid, Stack, Table, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Badge, Button, Group, Paper, Select, SimpleGrid, Stack, Table, Tabs, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconId, IconInfoCircle } from '@tabler/icons-react';
 import { fetchApercuCartesClasse, messageErreurCarte, ouvrirCartesClasse, type SourcePhoto } from '../../api/cartes';
 import { fetchClassesCourantes } from '../../api/classes';
+import { CartesRetrait } from './CartesRetrait';
 
 const BADGE_PHOTO: Record<SourcePhoto | 'AUCUNE', { label: string; color: string }> = {
   ELEVE: { label: 'Fiche élève', color: 'green' },
@@ -26,8 +27,29 @@ function Chiffre({ label, valeur, color }: { label: string; valeur: string; colo
   );
 }
 
-// Impression des cartes scolaires d'une classe : planches A4 de 10 cartes (recto puis verso en miroir).
+// Deux onglets : cartes scolaires (planches de 10, recto verso) et cartes de retrait (maternelle, 8 par page).
 export function CartesScolairesPage() {
+  return (
+    <Stack>
+      <Title order={2}>Cartes</Title>
+      <Tabs defaultValue="scolaires" keepMounted={false}>
+        <Tabs.List mb="md">
+          <Tabs.Tab value="scolaires">Cartes scolaires</Tabs.Tab>
+          <Tabs.Tab value="retrait">Cartes de retrait (maternelle)</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="scolaires">
+          <CartesScolaires />
+        </Tabs.Panel>
+        <Tabs.Panel value="retrait">
+          <CartesRetrait />
+        </Tabs.Panel>
+      </Tabs>
+    </Stack>
+  );
+}
+
+// Impression des cartes scolaires d'une classe : planches A4 de 10 cartes (recto puis verso en miroir).
+function CartesScolaires() {
   const [niveauId, setNiveauId] = useState<string | null>(null);
   const [classeId, setClasseId] = useState<string | null>(null);
 
@@ -51,7 +73,6 @@ export function CartesScolairesPage() {
   return (
     <Stack>
       <div>
-        <Title order={2}>Cartes scolaires</Title>
         <Text c="dimmed" size="sm">
           Choisissez une classe de l'année en cours pour imprimer les cartes de tous ses élèves
         </Text>

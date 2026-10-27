@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { rafraichirFinances } from './budget';
 
 export interface FinanceDashboard {
   anneeScolaire: { id: string; libelle: string };
@@ -70,7 +71,7 @@ export interface CompteResultatMois {
 export interface RecettesParMois {
   anneeScolaire: { id: string; libelle: string };
   total: number;
-  parMois: { annee: number; mois: number; libelle: string; montant: number }[];
+  parMois: { annee: number; mois: number; libelle: string; montant: number; hors?: 'AVANT' | 'APRES' }[];
 }
 
 export interface SalairesParMois {
@@ -133,28 +134,41 @@ export interface StatistiquesPaiements {
 
 export type TypeOperation = 'Inscription' | 'Réinscription' | 'Écolage' | 'Trimestre 1' | 'Trimestre 2' | 'Trimestre 3' | 'Autre';
 
-// Bordereau journalier : ce qui a été encaissé un jour donné, une ligne par reçu (paiement).
+// Bordereau journalier : ce qui a été encaissé un jour donné, une ligne par élève : tous ses versements du jour y sont cumulés.
 export interface LigneBordereau {
-  numeroRecu: string; // N° du reçu (identifiant du paiement)
-  numeroFacture: string; // N° de la facture réglée
+  paiementIds: string[]; // pour ouvrir les reçus, dans l'ordre d'encaissement
+  numerosRecu: string[]; // N° des reçus tels qu'imprimés (« 001480 »)
   eleveId: string;
   matricule: string | null;
   nomComplet: string;
   classe: string;
   niveau: string;
-  typeOperation: TypeOperation;
-  fraisEtudes: number; // le montant pour l'écolage et les trimestres, 0 sinon
+  fraisInscription: number;
+  typeInscription: string; // « Inscription », « Réinscription », vide sinon
+  assurance: number;
+  totalInscriptionAssurance: number;
+  fraisEtudes: number; // la part écolage / trimestres des versements
+  fraisFormations: number; // formations supplémentaires (arabe, anglais, informatique...)
   totalPaye: number;
   date: string; // AAAA-MM-JJ
-  observation: string; // mode de paiement
+  observation: string; // mode(s) de paiement
+}
+
+export interface TotauxBordereau {
+  fraisInscription: number;
+  assurance: number;
+  totalInscriptionAssurance: number;
+  fraisEtudes: number;
+  fraisFormations: number;
+  totalPaye: number;
 }
 
 export interface BordereauJournalier {
   date: string;
-  ecole: { nom: string; ville: string | null };
+  ecole: { nom: string; sigle: string | null; ville: string | null; nomDirecteur: string | null; nomComptable: string | null };
   filtres: { niveaux: { id: string; nom: string }[] };
   lignes: LigneBordereau[];
-  totaux: { fraisEtudes: number; totalPaye: number };
+  totaux: TotauxBordereau;
 }
 
 export interface RecouvrementClasse {
@@ -229,6 +243,43 @@ export async function fetchStatistiquesPaiements(filtres: { niveauId?: string; c
   return data;
 }
 
+// Tableau de bord : paiements par tranche et par genre, pour chaque régime (« TOUS » en premier)
+export interface TranchePaiement {
+  cle: 'INSCRIPTION' | 'T1' | 'T2' | 'T3' | 'AUTRE';
+  libelle: string;
+  attendu: number;
+  paye: number;
+  reste: number;
+  taux: number;
+  soldes: number;
+  nonSoldes: number;
+}
+
+export interface GenrePaiement {
+  genre: 'M' | 'F' | 'TOTAL';
+  libelle: string;
+  effectif: number;
+  attendu: number;
+  paye: number;
+  reste: number;
+  taux: number;
+}
+
+export interface PaiementsParTranche {
+  anneeScolaire: { id: string; libelle: string };
+  regimes: { regime: string; libelle: string; tranches: TranchePaiement[]; genres: GenrePaiement[] }[];
+}
+
+export async function fetchPaiementsParTranche(filtres: { anneeScolaireId?: string; classeId?: string } = {}): Promise<PaiementsParTranche> {
+  const { data } = await apiClient.get('/finance/paiements-par-tranche', {
+    params: {
+      ...(filtres.anneeScolaireId ? { anneeScolaireId: filtres.anneeScolaireId } : {}),
+      ...(filtres.classeId ? { classeId: filtres.classeId } : {}),
+    },
+  });
+  return data;
+}
+
 function paramsBordereau(filtres: { date?: string; niveauId?: string }) {
   return { ...(filtres.date ? { date: filtres.date } : {}), ...(filtres.niveauId ? { niveauId: filtres.niveauId } : {}) };
 }
@@ -260,6 +311,7 @@ export async function fetchMouvements(anneeScolaireId?: string, type?: TypeMouve
 
 export async function creerMouvement(input: CreateMouvementInput): Promise<Mouvement> {
   const { data } = await apiClient.post('/finance/mouvements', input);
+  rafraichirFinances();
   return data;
 }
 
@@ -267,6 +319,7 @@ export async function creerMouvement(input: CreateMouvementInput): Promise<Mouve
 // dans les journaux d'accès du serveur.
 export async function supprimerMouvement(id: string, code?: string): Promise<void> {
   await apiClient.delete(`/finance/mouvements/${id}`, { headers: code ? { 'X-Code-Suppression': code } : undefined });
+  rafraichirFinances();
 }
 
 export interface RegenererFacturesResult {

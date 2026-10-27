@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Title,
@@ -36,6 +37,7 @@ import {
   type TypeDocument,
 } from '../../api/admissions';
 import { fetchClassesCourantes, fetchAnneesScolaires } from '../../api/classes';
+import { REGIMES, type Regime } from '../../api/finances';
 import { confirmerSuppression } from '../../lib/confirm';
 
 const INSCRIPTION_DIRECTE_VIDE: InscriptionDirecteInput = {
@@ -49,6 +51,14 @@ const INSCRIPTION_DIRECTE_VIDE: InscriptionDirecteInput = {
   prenomParent: '',
   telephoneParent: '',
   emailParent: '',
+  perePrenom: '',
+  pereNom: '',
+  pereTelephone: '',
+  pereProfession: '',
+  merePrenom: '',
+  mereNom: '',
+  mereTelephone: '',
+  mereProfession: '',
 };
 
 const ACCEPT_FICHIERS =
@@ -84,7 +94,7 @@ const STATUT_LABELS: Record<StatutDemande, string> = {
 
 type Onglet = StatutDemande | 'HISTORIQUE';
 
-export function AdmissionsPage() {
+export function AdmissionsPage({ ajoutSeul = false }: { ajoutSeul?: boolean }) {
   const queryClient = useQueryClient();
   const [filtre, setFiltre] = useState<Onglet>('EN_ATTENTE');
 
@@ -107,6 +117,7 @@ export function AdmissionsPage() {
 
   const [demandeAccept, setDemandeAccept] = useState<DemandeInscription | null>(null);
   const [classeId, setClasseId] = useState<string | null>(null);
+  const [regime, setRegime] = useState<string | null>('EXTERNAT');
   const [matricule, setMatricule] = useState('');
 
   const [demandeRefus, setDemandeRefus] = useState<DemandeInscription | null>(null);
@@ -114,7 +125,13 @@ export function AdmissionsPage() {
 
   const [demandeDocs, setDemandeDocs] = useState<DemandeInscription | null>(null);
 
-  const [inscriptionOuverte, setInscriptionOuverte] = useState(false);
+  // « Nouvel élève » depuis la liste des élèves : ouvre directement le formulaire (?nouveau=1).
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [inscriptionOuverte, setInscriptionOuverte] = useState(ajoutSeul || searchParams.get('nouveau') === '1');
+  const [classeInscription, setClasseInscription] = useState<string | null>(null);
+  const [regimeInscription, setRegimeInscription] = useState<string | null>('EXTERNAT');
+  const [matriculeInscription, setMatriculeInscription] = useState('');
   const [inscription, setInscription] = useState<InscriptionDirecteInput>(INSCRIPTION_DIRECTE_VIDE);
   const [piecesInscription, setPiecesInscription] = useState<PieceAJoindre[]>([]);
   const [typeDocInscription, setTypeDocInscription] = useState<string | null>('PHOTO');
@@ -153,13 +170,19 @@ export function AdmissionsPage() {
   });
 
   const accepterMutation = useMutation({
-    mutationFn: () => accepterDemande(demandeAccept!.id, { classeId: classeId!, matricule: matricule || undefined }),
+    mutationFn: () =>
+      accepterDemande(demandeAccept!.id, {
+        classeId: classeId!,
+        regime: (regime ?? undefined) as Regime | undefined,
+        matricule: matricule || undefined,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['demandes'] });
       queryClient.invalidateQueries({ queryKey: ['eleves'] });
       notifications.show({ message: 'Demande acceptée, élève créé', color: 'green' });
       setDemandeAccept(null);
       setClasseId(null);
+      setRegime('EXTERNAT');
       setMatricule('');
     },
     onError: (error: any) => {
@@ -223,13 +246,30 @@ export function AdmissionsPage() {
     },
   });
 
+  function fermerInscription() {
+    if (ajoutSeul) {
+      navigate('/eleves');
+      return;
+    }
+    setInscriptionOuverte(false);
+    setInscription(INSCRIPTION_DIRECTE_VIDE);
+    setPiecesInscription([]);
+    setFichierDocInscription(null);
+    setClasseInscription(null);
+    setRegimeInscription('EXTERNAT');
+    setMatriculeInscription('');
+  }
+
+  // Élève reçu au secrétariat : inscrit directement dans sa classe, sans passer par la liste d'attente.
+  // La demande d'admission est créée (pièces jointes, historique) puis acceptée aussitôt.
   const inscriptionMutation = useMutation({
     mutationFn: async () => {
+      const classe = classesAnneeCourante.find((c) => c.id === classeInscription);
       const demande = await inscrireSurPlace({
         ...inscription,
         dateNaissance: inscription.dateNaissance || undefined,
         lieuNaissance: inscription.lieuNaissance || undefined,
-        niveauSouhaite: inscription.niveauSouhaite || undefined,
+        niveauSouhaite: classe?.niveau.nom,
         emailParent: inscription.emailParent || undefined,
       });
 
@@ -241,25 +281,40 @@ export function AdmissionsPage() {
           echecs.push(piece.fichier.name);
         }
       }
-      return echecs;
-    },
-    onSuccess: (echecs) => {
-      queryClient.invalidateQueries({ queryKey: ['demandes'] });
-      if (echecs.length > 0) {
-        notifications.show({
-          message: `Élève placé en attente. Certains documents n'ont pas pu être envoyés : ${echecs.join(', ')}.`,
-          color: 'orange',
+
+      try {
+        const { eleve } = await accepterDemande(demande.id, {
+          classeId: classeInscription!,
+          regime: (regimeInscription ?? undefined) as Regime | undefined,
+          matricule: matriculeInscription.trim() || undefined,
         });
-      } else {
-        notifications.show({ message: "Élève ajouté à la liste d'attente des admissions", color: 'green' });
+        return { echecs, eleveId: eleve.id as string, classe: classe?.nom ?? '' };
+      } catch (error: any) {
+        // L'élève n'a pas pu être inscrit (matricule déjà pris...) : sa demande reste en attente, rien n'est perdu.
+        throw new Error(
+          `${error?.response?.data?.message ?? "L'inscription a échoué"}. La demande est conservée dans « En attente ».`,
+        );
       }
+    },
+    onSuccess: ({ echecs, eleveId, classe }) => {
+      queryClient.invalidateQueries({ queryKey: ['demandes'] });
+      queryClient.invalidateQueries({ queryKey: ['eleves'] });
+      queryClient.invalidateQueries({ queryKey: ['effectifs'] });
+      notifications.show({
+        message:
+          echecs.length > 0
+            ? `Élève inscrit en ${classe}. Certains documents n'ont pas pu être envoyés : ${echecs.join(', ')}.`
+            : `Élève inscrit en ${classe}`,
+        color: echecs.length > 0 ? 'orange' : 'green',
+      });
       setInscriptionOuverte(false);
       setInscription(INSCRIPTION_DIRECTE_VIDE);
       setPiecesInscription([]);
-      setFiltre('EN_ATTENTE');
+      navigate(`/eleves/${eleveId}`);
     },
     onError: (error: any) => {
-      notifications.show({ message: error?.response?.data?.message ?? 'Erreur', color: 'red' });
+      queryClient.invalidateQueries({ queryKey: ['demandes'] });
+      notifications.show({ message: error?.response?.data?.message ?? error?.message ?? 'Erreur', color: 'red' });
     },
   });
 
@@ -268,7 +323,194 @@ export function AdmissionsPage() {
     inscription.prenomEleve.trim() &&
     inscription.nomParent.trim() &&
     inscription.prenomParent.trim() &&
-    inscription.telephoneParent.trim();
+    inscription.telephoneParent.trim() &&
+    classeInscription;
+
+  const modalInscription = (
+    <Modal
+      opened={inscriptionOuverte}
+      onClose={fermerInscription}
+      title={ajoutSeul ? "Nouvel élève" : "Inscription sur place"}
+      size="lg"
+    >
+      <Stack>
+        <Text size="sm" c="dimmed">
+          Pour un élève reçu directement au secrétariat : il est inscrit tout de suite dans la classe
+          choisie, sans passer par la liste d'attente. Ses frais d'inscription et d'écolage sont facturés.
+        </Text>
+        <Group grow>
+          <TextInput
+            label="Nom de l'élève"
+            value={inscription.nomEleve}
+            onChange={(e) => {
+              const nomEleve = e.currentTarget.value;
+              setInscription((v) => ({ ...v, nomEleve }));
+            }}
+            required
+          />
+          <TextInput
+            label="Prénom de l'élève"
+            value={inscription.prenomEleve}
+            onChange={(e) => {
+              const prenomEleve = e.currentTarget.value;
+              setInscription((v) => ({ ...v, prenomEleve }));
+            }}
+            required
+          />
+        </Group>
+        <Group grow>
+          <Select
+            label="Genre"
+            data={[
+              { value: 'M', label: 'Garçon' },
+              { value: 'F', label: 'Fille' },
+            ]}
+            value={inscription.genre}
+            onChange={(v) => setInscription((prev) => ({ ...prev, genre: (v as 'M' | 'F') ?? 'M' }))}
+          />
+          <TextInput
+            label="Date de naissance (optionnel)"
+            type="date"
+            value={inscription.dateNaissance}
+            onChange={(e) => {
+              const dateNaissance = e.currentTarget.value;
+              setInscription((v) => ({ ...v, dateNaissance }));
+            }}
+          />
+        </Group>
+        <TextInput
+          label="Lieu de naissance (optionnel)"
+          value={inscription.lieuNaissance}
+          onChange={(e) => {
+            const lieuNaissance = e.currentTarget.value;
+            setInscription((v) => ({ ...v, lieuNaissance }));
+          }}
+        />
+        <Text fw={600} size="sm" mt="sm">
+          Classe
+        </Text>
+        <Group grow align="flex-start">
+          <Select
+            label="Classe"
+            placeholder="Choisir une classe"
+            description={anneeCourante ? `Année scolaire ${anneeCourante.libelle}` : undefined}
+            data={classesAnneeCourante.map((c) => ({ value: c.id, label: `${c.nom} (${c.niveau.nom})` }))}
+            value={classeInscription}
+            onChange={setClasseInscription}
+            searchable
+            required
+          />
+          <Select
+            label="Régime"
+            description="Détermine les tarifs d'écolage"
+            data={REGIMES}
+            value={regimeInscription}
+            onChange={setRegimeInscription}
+            allowDeselect={false}
+          />
+        </Group>
+        <TextInput
+          label="Matricule (optionnel)"
+          value={matriculeInscription}
+          onChange={(e) => setMatriculeInscription(e.currentTarget.value)}
+        />
+
+        <Text fw={600} size="sm" mt="sm">
+          Parent / tuteur
+        </Text>
+        <Group grow>
+          <TextInput
+            label="Nom du parent"
+            value={inscription.nomParent}
+            onChange={(e) => {
+              const nomParent = e.currentTarget.value;
+              setInscription((v) => ({ ...v, nomParent }));
+            }}
+            required
+          />
+          <TextInput
+            label="Prénom du parent"
+            value={inscription.prenomParent}
+            onChange={(e) => {
+              const prenomParent = e.currentTarget.value;
+              setInscription((v) => ({ ...v, prenomParent }));
+            }}
+            required
+          />
+        </Group>
+        <Group grow>
+          <TextInput
+            label="Téléphone du parent"
+            value={inscription.telephoneParent}
+            onChange={(e) => {
+              const telephoneParent = e.currentTarget.value;
+              setInscription((v) => ({ ...v, telephoneParent }));
+            }}
+            required
+          />
+          <TextInput
+            label="Email du parent (optionnel)"
+            value={inscription.emailParent}
+            onChange={(e) => {
+              const emailParent = e.currentTarget.value;
+              setInscription((v) => ({ ...v, emailParent }));
+            }}
+          />
+        </Group>
+
+        <Text fw={600} size="sm" mt="sm">
+          Documents (photo, relevé de notes, extrait de naissance...)
+        </Text>
+        <Text size="xs" c="dimmed">
+          Formats acceptés : PDF, images (JPG, PNG, GIF, WEBP, HEIC) et Word (DOC, DOCX). 10 Mo maximum par fichier.
+        </Text>
+
+        {piecesInscription.length > 0 && (
+          <Stack gap="xs">
+            {piecesInscription.map((p, i) => (
+              <Group key={i} gap="xs">
+                <Badge color="blue" variant="light">
+                  {TYPES_DOCUMENT.find((t) => t.value === p.type)?.label ?? p.type}
+                </Badge>
+                <Text size="sm" style={{ flex: 1 }}>
+                  {p.fichier.name}
+                </Text>
+                <ActionIcon color="red" variant="subtle" onClick={() => retirerPieceInscription(i)} aria-label="Retirer">
+                  ✕
+                </ActionIcon>
+              </Group>
+            ))}
+          </Stack>
+        )}
+
+        <Group align="flex-end">
+          <Select label="Type" data={TYPES_DOCUMENT} value={typeDocInscription} onChange={setTypeDocInscription} w={{ base: '100%', sm: 180 }} />
+          <FileInput
+            label="Fichier"
+            placeholder="Choisir un fichier"
+            accept={ACCEPT_FICHIERS}
+            value={fichierDocInscription}
+            onChange={setFichierDocInscription}
+            w={{ base: '100%', sm: 220 }}
+          />
+          <Button variant="light" disabled={!typeDocInscription || !fichierDocInscription} onClick={ajouterPieceInscription}>
+            Ajouter le document
+          </Button>
+        </Group>
+
+        <Button
+          disabled={!inscriptionValide}
+          loading={inscriptionMutation.isPending}
+          onClick={() => inscriptionMutation.mutate()}
+        >
+          Inscrire l'élève{piecesInscription.length > 0 ? ` (${piecesInscription.length} document(s) joint(s))` : ''}
+        </Button>
+      </Stack>
+    </Modal>
+  );
+
+  // Admissions désactivées : la page ne sert plus qu'au formulaire « Nouvel élève » (route /eleves/nouveau).
+  if (ajoutSeul) return modalInscription;
 
   return (
     <Stack>
@@ -439,6 +681,14 @@ export function AdmissionsPage() {
             onChange={setClasseId}
             required
           />
+          <Select
+            label="Régime"
+            description="Détermine les tarifs d'écolage facturés à l'élève"
+            data={REGIMES}
+            value={regime}
+            onChange={setRegime}
+            allowDeselect={false}
+          />
           <TextInput
             label="Matricule (optionnel)"
             value={matricule}
@@ -463,169 +713,7 @@ export function AdmissionsPage() {
         </Stack>
       </Modal>
 
-      <Modal
-        opened={inscriptionOuverte}
-        onClose={() => {
-          setInscriptionOuverte(false);
-          setInscription(INSCRIPTION_DIRECTE_VIDE);
-          setPiecesInscription([]);
-          setFichierDocInscription(null);
-        }}
-        title="Inscription sur place"
-        size="lg"
-      >
-        <Stack>
-          <Text size="sm" c="dimmed">
-            Pour un élève reçu directement au secrétariat. Crée une demande d'admission en attente,
-            exactement comme le formulaire public : elle apparaîtra dans l'onglet « En attente » et
-            devra être acceptée pour créer l'élève.
-          </Text>
-          <Group grow>
-            <TextInput
-              label="Nom de l'élève"
-              value={inscription.nomEleve}
-              onChange={(e) => {
-                const nomEleve = e.currentTarget.value;
-                setInscription((v) => ({ ...v, nomEleve }));
-              }}
-              required
-            />
-            <TextInput
-              label="Prénom de l'élève"
-              value={inscription.prenomEleve}
-              onChange={(e) => {
-                const prenomEleve = e.currentTarget.value;
-                setInscription((v) => ({ ...v, prenomEleve }));
-              }}
-              required
-            />
-          </Group>
-          <Group grow>
-            <Select
-              label="Genre"
-              data={[
-                { value: 'M', label: 'Garçon' },
-                { value: 'F', label: 'Fille' },
-              ]}
-              value={inscription.genre}
-              onChange={(v) => setInscription((prev) => ({ ...prev, genre: (v as 'M' | 'F') ?? 'M' }))}
-            />
-            <TextInput
-              label="Date de naissance (optionnel)"
-              type="date"
-              value={inscription.dateNaissance}
-              onChange={(e) => {
-                const dateNaissance = e.currentTarget.value;
-                setInscription((v) => ({ ...v, dateNaissance }));
-              }}
-            />
-          </Group>
-          <TextInput
-            label="Lieu de naissance (optionnel)"
-            value={inscription.lieuNaissance}
-            onChange={(e) => {
-              const lieuNaissance = e.currentTarget.value;
-              setInscription((v) => ({ ...v, lieuNaissance }));
-            }}
-          />
-          <Group grow>
-            <TextInput
-              label="Nom du parent"
-              value={inscription.nomParent}
-              onChange={(e) => {
-                const nomParent = e.currentTarget.value;
-                setInscription((v) => ({ ...v, nomParent }));
-              }}
-              required
-            />
-            <TextInput
-              label="Prénom du parent"
-              value={inscription.prenomParent}
-              onChange={(e) => {
-                const prenomParent = e.currentTarget.value;
-                setInscription((v) => ({ ...v, prenomParent }));
-              }}
-              required
-            />
-          </Group>
-          <Group grow>
-            <TextInput
-              label="Téléphone du parent"
-              value={inscription.telephoneParent}
-              onChange={(e) => {
-                const telephoneParent = e.currentTarget.value;
-                setInscription((v) => ({ ...v, telephoneParent }));
-              }}
-              required
-            />
-            <TextInput
-              label="Email du parent (optionnel)"
-              value={inscription.emailParent}
-              onChange={(e) => {
-                const emailParent = e.currentTarget.value;
-                setInscription((v) => ({ ...v, emailParent }));
-              }}
-            />
-          </Group>
-          <TextInput
-            label="Niveau souhaité (optionnel)"
-            placeholder="ex: CP1"
-            value={inscription.niveauSouhaite}
-            onChange={(e) => {
-              const niveauSouhaite = e.currentTarget.value;
-              setInscription((v) => ({ ...v, niveauSouhaite }));
-            }}
-          />
-
-          <Text fw={600} size="sm" mt="sm">
-            Documents (photo, relevé de notes, extrait de naissance...)
-          </Text>
-          <Text size="xs" c="dimmed">
-            Formats acceptés : PDF, images (JPG, PNG, GIF, WEBP, HEIC) et Word (DOC, DOCX). 10 Mo maximum par fichier.
-          </Text>
-
-          {piecesInscription.length > 0 && (
-            <Stack gap="xs">
-              {piecesInscription.map((p, i) => (
-                <Group key={i} gap="xs">
-                  <Badge color="blue" variant="light">
-                    {TYPES_DOCUMENT.find((t) => t.value === p.type)?.label ?? p.type}
-                  </Badge>
-                  <Text size="sm" style={{ flex: 1 }}>
-                    {p.fichier.name}
-                  </Text>
-                  <ActionIcon color="red" variant="subtle" onClick={() => retirerPieceInscription(i)} aria-label="Retirer">
-                    ✕
-                  </ActionIcon>
-                </Group>
-              ))}
-            </Stack>
-          )}
-
-          <Group align="flex-end">
-            <Select label="Type" data={TYPES_DOCUMENT} value={typeDocInscription} onChange={setTypeDocInscription} w={{ base: '100%', sm: 180 }} />
-            <FileInput
-              label="Fichier"
-              placeholder="Choisir un fichier"
-              accept={ACCEPT_FICHIERS}
-              value={fichierDocInscription}
-              onChange={setFichierDocInscription}
-              w={{ base: '100%', sm: 220 }}
-            />
-            <Button variant="light" disabled={!typeDocInscription || !fichierDocInscription} onClick={ajouterPieceInscription}>
-              Ajouter le document
-            </Button>
-          </Group>
-
-          <Button
-            disabled={!inscriptionValide}
-            loading={inscriptionMutation.isPending}
-            onClick={() => inscriptionMutation.mutate()}
-          >
-            Placer en attente{piecesInscription.length > 0 ? ` (${piecesInscription.length} document(s) joint(s))` : ''}
-          </Button>
-        </Stack>
-      </Modal>
+      {modalInscription}
 
       <Modal
         opened={!!demandeDocs}

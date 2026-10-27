@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { enteteLogo } from '../common/pdf/entete.util';
 
 const MOIS_LABELS = [
   '', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -44,7 +45,7 @@ export function genererBulletinPaiePdf(data: BulletinPaieData): Promise<Buffer> 
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(18).text(data.ecoleNom, { align: 'center' });
+    enteteLogo(doc); // logo de l'école à la place de son nom
     doc.moveDown();
     doc.fontSize(14).text(`Bulletin de salaire — ${MOIS_LABELS[data.mois]} ${data.annee}`, { align: 'center' });
     doc.moveDown(1.5);

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -10,6 +10,10 @@ import { FinanceService } from './finance.service';
 import { FinanceExportService } from './finance-export.service';
 import { CreateMouvementDto } from './dto/mouvement.dto';
 import { FacturesService } from '../finances/factures.service';
+import { BudgetService } from './budget.service';
+import { ClotureService } from './cloture.service';
+import { ApercuClotureDto, ExecuterClotureDto } from './dto/cloture.dto';
+import { AjouterPosteBudgetDto, ModifierPosteBudgetDto } from './dto/budget.dto';
 
 const ROLES_FINANCE = [
   RoleUtilisateur.FONDATEUR,
@@ -25,7 +29,66 @@ export class FinanceController {
     private service: FinanceService,
     private exportService: FinanceExportService,
     private facturesService: FacturesService,
+    private budgetService: BudgetService,
+    private clotureService: ClotureService,
   ) {}
+
+  // --- Clôture d'année : aperçu (lecture seule), exécution (code de sécurité), historique ---
+  @Post('cloture/apercu')
+  apercuCloture(@CurrentUser() user: JwtPayloadUser, @Body() dto: ApercuClotureDto) {
+    return this.clotureService.apercu(user.ecoleId, dto);
+  }
+
+  @Post('cloture/executer')
+  executerCloture(@CurrentUser() user: JwtPayloadUser, @Body() dto: ExecuterClotureDto) {
+    return this.clotureService.executer(user.ecoleId, dto, user.userId);
+  }
+
+  @Get('cloture/historique')
+  historiqueClotures(@CurrentUser() user: JwtPayloadUser) {
+    return this.clotureService.historique(user.ecoleId);
+  }
+
+  // --- Budget de trésorerie (prévisionnel de l'année) ---
+  @Get('budget')
+  @Roles(RoleUtilisateur.FONDATEUR) // Budget et trésorerie : fondateur seulement
+  budget(@CurrentUser() user: JwtPayloadUser, @Query('anneeScolaireId') anneeScolaireId?: string) {
+    return this.budgetService.budget(user.ecoleId, anneeScolaireId || undefined);
+  }
+
+  @Post('budget/postes')
+  @Roles(RoleUtilisateur.FONDATEUR) // Budget et trésorerie : fondateur seulement
+  ajouterPosteBudget(@CurrentUser() user: JwtPayloadUser, @Body() dto: AjouterPosteBudgetDto) {
+    return this.budgetService.ajouterPoste(user.ecoleId, dto);
+  }
+
+  @Post('budget/postes-habituels')
+  @Roles(RoleUtilisateur.FONDATEUR) // Budget et trésorerie : fondateur seulement
+  ajouterPostesHabituels(@CurrentUser() user: JwtPayloadUser, @Query('anneeScolaireId') anneeScolaireId?: string) {
+    return this.budgetService.ajouterPostesHabituels(user.ecoleId, anneeScolaireId || undefined);
+  }
+
+  // Modifier ou supprimer un poste demande le code des dépenses, passé dans un en-tête comme pour les mouvements.
+  @Patch('budget/postes/:id')
+  @Roles(RoleUtilisateur.FONDATEUR) // Budget et trésorerie : fondateur seulement
+  modifierPosteBudget(
+    @CurrentUser() user: JwtPayloadUser,
+    @Param('id') id: string,
+    @Body() dto: ModifierPosteBudgetDto,
+    @Headers('x-code-suppression') code?: string,
+  ) {
+    return this.budgetService.modifierPoste(user.ecoleId, id, dto, code);
+  }
+
+  @Delete('budget/postes/:id')
+  @Roles(RoleUtilisateur.FONDATEUR) // Budget et trésorerie : fondateur seulement
+  supprimerPosteBudget(
+    @CurrentUser() user: JwtPayloadUser,
+    @Param('id') id: string,
+    @Headers('x-code-suppression') code?: string,
+  ) {
+    return this.budgetService.supprimerPoste(user.ecoleId, id, code);
+  }
 
   @Get('dashboard')
   dashboard(@CurrentUser() user: JwtPayloadUser, @Query('anneeScolaireId') anneeScolaireId?: string) {
@@ -71,6 +134,19 @@ export class FinanceController {
     });
   }
 
+  // Tableau de bord : paiements par tranche et par genre, pour chaque régime
+  @Get('paiements-par-tranche')
+  paiementsParTranche(
+    @CurrentUser() user: JwtPayloadUser,
+    @Query('anneeScolaireId') anneeScolaireId?: string,
+    @Query('classeId') classeId?: string,
+  ) {
+    return this.service.paiementsParTranche(user.ecoleId, {
+      anneeScolaireId: anneeScolaireId || undefined,
+      classeId: classeId || undefined,
+    });
+  }
+
   @Get('bordereau-journalier')
   bordereauJournalier(
     @CurrentUser() user: JwtPayloadUser,
@@ -86,6 +162,7 @@ export class FinanceController {
   }
 
   @Get('tresorerie-par-mois')
+  @Roles(RoleUtilisateur.FONDATEUR) // Budget et trésorerie : fondateur seulement
   tresorerieParMois(@CurrentUser() user: JwtPayloadUser, @Query('anneeScolaireId') anneeScolaireId?: string) {
     return this.service.tresorerieParMois(user.ecoleId, anneeScolaireId);
   }
@@ -140,6 +217,7 @@ export class FinanceController {
   }
 
   @Get('export/tresorerie.xlsx')
+  @Roles(RoleUtilisateur.FONDATEUR) // Budget et trésorerie : fondateur seulement
   async exportTresorerie(
     @CurrentUser() user: JwtPayloadUser,
     @Query('anneeScolaireId') anneeScolaireId: string | undefined,

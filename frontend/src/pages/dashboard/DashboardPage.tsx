@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Title, SimpleGrid, Paper, Text, Group, Button, Stack, Alert } from '@mantine/core';
+import { Title, SimpleGrid, Paper, Text, Group, Button, Stack, Alert, Badge, Progress } from '@mantine/core';
 import { IconDownload, IconInfoCircle } from '@tabler/icons-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { fetchDashboard, telechargerExportEleves, telechargerExportImpayes } from '../../api/reporting';
@@ -7,6 +8,8 @@ import { fetchTresorerieParMois } from '../../api/finance';
 import { useAuth } from '../../auth/AuthContext';
 import { TresorerieResume } from '../finance/TresorerieResume';
 import { StatistiquesPaiements } from './StatistiquesPaiements';
+import { PaiementsParTranche } from './PaiementsParTranche';
+import { ImpayesTrancheModal } from './ImpayesTrancheModal';
 
 // Mêmes rôles que l'API /finance (voir FinanceController) : les autres n'ont pas accès aux chiffres de trésorerie.
 const ROLES_FINANCE = ['FONDATEUR', 'CHEF_ETABLISSEMENT', 'COMPTABLE'];
@@ -27,12 +30,14 @@ function StatCard({ label, value, color }: { label: string; value: string; color
 export function DashboardPage() {
   const { user } = useAuth();
   const voitTresorerie = !!user && ROLES_FINANCE.includes(user.role);
+  const estFondateur = user?.role === 'FONDATEUR';
+  const [impayesTrancheOuvert, setImpayesTrancheOuvert] = useState(false);
 
   const { data, isLoading } = useQuery({ queryKey: ['dashboard'], queryFn: fetchDashboard });
   const { data: tresorerie } = useQuery({
     queryKey: ['dashboard-tresorerie'],
     queryFn: () => fetchTresorerieParMois(),
-    enabled: voitTresorerie,
+    enabled: estFondateur, // budget et trésorerie : fondateur seulement
   });
 
   if (isLoading || !data) return <p>Chargement...</p>;
@@ -45,6 +50,7 @@ export function DashboardPage() {
 
   return (
     <Stack>
+      <ImpayesTrancheModal opened={impayesTrancheOuvert} onClose={() => setImpayesTrancheOuvert(false)} />
       <Group justify="space-between">
         <div>
           <Title order={2}>Tableau de bord</Title>
@@ -59,6 +65,11 @@ export function DashboardPage() {
           {voitTresorerie && (
             <Button variant="light" leftSection={<IconDownload size={16} stroke={1.5} />} onClick={() => telechargerExportImpayes()}>
               Télécharger la liste des impayés
+            </Button>
+          )}
+          {voitTresorerie && (
+            <Button variant="light" leftSection={<IconDownload size={16} stroke={1.5} />} onClick={() => setImpayesTrancheOuvert(true)}>
+              Impayés par tranche et classe
             </Button>
           )}
         </Group>
@@ -82,19 +93,58 @@ export function DashboardPage() {
             color="green"
           />
         )}
-        {voitTresorerie && data.impayes && (
-          <StatCard
-            label="Impayés"
-            value={`${data.impayes.montant.toLocaleString('fr-FR')} GNF`}
-            color={data.impayes.montant > 0 ? 'red' : 'green'}
-          />
+        {/* Écolage impayé : même base que « Écolage payé » (tranches de l'année), les deux pourcentages font 100 %. */}
+        {voitTresorerie && data.ecolage && (
+          <Paper withBorder p="md">
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              <Text size="sm" c="dimmed">
+                Écolage impayé
+              </Text>
+              <Badge variant="light" size="lg" color={data.ecolage.facture - data.ecolage.paye > 0 ? 'red' : 'green'}>
+                {data.ecolage.facture > 0 ? 100 - data.ecolage.pourcentage : 0} %
+              </Badge>
+            </Group>
+            <Text fw={700} size="xl" c={data.ecolage.facture - data.ecolage.paye > 0 ? 'red' : 'green'}>
+              {Math.max(0, data.ecolage.facture - data.ecolage.paye).toLocaleString('fr-FR')} GNF
+            </Text>
+            <Progress value={data.ecolage.facture > 0 ? 100 - data.ecolage.pourcentage : 0} color="red" size="sm" mt={6} />
+            <Text size="xs" c="dimmed" mt={4}>
+              sur {data.ecolage.facture.toLocaleString('fr-FR')} GNF facturés
+            </Text>
+          </Paper>
         )}
-        <StatCard label="Absences aujourd'hui" value={String(data.absencesAujourdhui.absents)} color="orange" />
+        {/* Gestion financière : écolage payé et taux de paiement ; les autres rôles gardent les absences du jour. */}
+        {voitTresorerie && data.ecolage ? (
+          <Paper withBorder p="md">
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              <Text size="sm" c="dimmed">
+                Écolage payé
+              </Text>
+              <Badge
+                variant="light"
+                size="lg"
+                color={data.ecolage.pourcentage >= 75 ? 'green' : data.ecolage.pourcentage >= 40 ? 'yellow' : 'red'}
+              >
+                {data.ecolage.pourcentage} %
+              </Badge>
+            </Group>
+            <Text fw={700} size="xl" c="green">
+              {data.ecolage.paye.toLocaleString('fr-FR')} GNF
+            </Text>
+            <Progress value={data.ecolage.pourcentage} size="sm" mt={6} />
+            <Text size="xs" c="dimmed" mt={4}>
+              sur {data.ecolage.facture.toLocaleString('fr-FR')} GNF facturés
+            </Text>
+          </Paper>
+        ) : (
+          <StatCard label="Absences aujourd'hui" value={String(data.absencesAujourdhui.absents)} color="orange" />
+        )}
       </SimpleGrid>
 
+      {voitTresorerie && <PaiementsParTranche />}
       {voitTresorerie && <StatistiquesPaiements />}
 
-      {voitTresorerie && tresorerie && <TresorerieResume data={tresorerie} />}
+      {estFondateur && tresorerie && <TresorerieResume data={tresorerie} />}
 
       <Paper withBorder p="md" h={300}>
         <Title order={4} mb="sm">

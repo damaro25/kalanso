@@ -26,6 +26,9 @@ export class CommunicationService {
     });
   }
 
+  // Les SMS ne partent que vers le contact principal (le « Téléphone du parent » saisi à l'inscription), jamais
+  // vers le père, la mère ou les autres parents liés. Contact principal sans numéro : aucun envoi. Élève sans
+  // contact principal désigné (données anciennes) : ses parents liés, hors filiation père / mère, comme avant.
   private async destinatairesEleve(eleveId: string): Promise<DestinataireParent[]> {
     const liens = await this.prisma.eleveParent.findMany({
       where: { eleveId },
@@ -33,7 +36,9 @@ export class CommunicationService {
       orderBy: { contactPrincipal: 'desc' },
     });
 
-    return liens
+    const principal = liens.find((lien) => lien.contactPrincipal);
+    const retenus = principal ? [principal] : liens.filter((lien) => lien.lien !== 'Père' && lien.lien !== 'Mère');
+    return retenus
       .filter((lien) => lien.parentTuteur.telephone)
       .map((lien) => ({
         parentTuteurId: lien.parentTuteurId,
@@ -106,6 +111,12 @@ export class CommunicationService {
     return { envoyes, elevesSansContact: sansContact };
   }
 
+  // Les SMS commencent par le nom de l'école (saisi dans Établissement > Configuration).
+  private async signature(ecoleId: string) {
+    const ecole = await this.prisma.ecole.findUnique({ where: { id: ecoleId }, select: { nom: true } });
+    return ecole?.nom?.trim() || 'La cible du formateur';
+  }
+
   /**
    * Notification automatique déclenchée par l'appel journalier.
    * Silencieuse si l'élève n'a aucun parent joignable.
@@ -117,7 +128,7 @@ export class CommunicationService {
     const destinataires = await this.destinatairesEleve(eleveId);
     if (destinataires.length === 0) return;
 
-    const contenu = `La cible du formateur : votre enfant ${eleve.prenom} ${eleve.nom} a été marqué(e) absent(e) le ${date.toLocaleDateString('fr-FR')}. Merci de contacter l'école.`;
+    const contenu = `${await this.signature(ecoleId)} : votre enfant ${eleve.prenom} ${eleve.nom} a été marqué(e) absent(e) le ${date.toLocaleDateString('fr-FR')}. Merci de contacter l'école.`;
     await this.envoyerA(ecoleId, eleveId, destinataires, contenu, 'ABSENCE');
   }
 
@@ -137,7 +148,7 @@ export class CommunicationService {
       throw new BadRequestException("Cet élève n'a aucun parent avec un numéro de téléphone");
     }
 
-    const contenu = `La cible du formateur : rappel de paiement pour ${facture.eleve.prenom} ${facture.eleve.nom} — ${facture.libelle} : reste à payer ${reste.toLocaleString('fr-FR')} GNF. Merci de régulariser auprès de l'école.`;
+    const contenu = `${await this.signature(ecoleId)} : rappel de paiement pour ${facture.eleve.prenom} ${facture.eleve.nom} — ${facture.libelle} : reste à payer ${reste.toLocaleString('fr-FR')} GNF. Merci de régulariser auprès de l'école.`;
     return this.envoyerA(ecoleId, facture.eleveId, destinataires, contenu, 'RAPPEL_IMPAYE', envoyeParId);
   }
 }

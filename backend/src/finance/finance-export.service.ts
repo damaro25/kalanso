@@ -107,9 +107,9 @@ export class FinanceExportService {
     };
   }
 
-  // Bordereau journalier au format de la feuille papier de l'école : une ligne par reçu (paiement),
-  // avec son N° de reçu, le N° de la facture réglée et le type d'opération ; totaux en bas, ville et
-  // date, puis les signatures.
+  // Bordereau journalier, copie de la feuille papier de l'école : en-tête (école, République, total du
+  // jour sur fond jaune), tableau à en-tête bleu et lignes alternées, totaux encadrés, ville et date,
+  // puis les signatures du Directeur Général et du Percepteur-Comptable.
   async bordereauJournalierXlsx(
     ecoleId: string,
     filtres: { date?: string; niveauId?: string },
@@ -118,82 +118,139 @@ export class FinanceExportService {
     const niveau = filtres.niveauId ? b.filtres.niveaux.find((n) => n.id === filtres.niveauId) : undefined;
     const dateFr = b.date.split('-').reverse().join('/');
 
-    const colonnes: { titre: string; largeur: number; montant?: boolean }[] = [
-      { titre: 'N°', largeur: 6 },
-      { titre: 'Classe', largeur: 12 },
-      { titre: 'Reçu N°', largeur: 30 },
-      { titre: 'Facture N°', largeur: 30 },
-      { titre: 'Matricule', largeur: 14 },
-      { titre: 'Prénoms & Nom', largeur: 30 },
-      { titre: "Type d'opération", largeur: 18 },
-      { titre: 'Jour du versement', largeur: 16 },
-      { titre: "Frais d'études payés", largeur: 18, montant: true },
-      { titre: 'Total payé', largeur: 16, montant: true },
-      { titre: 'Observation', largeur: 20 },
+    const BLEU = 'FF2E75B6';
+    const BLEU_CLAIR = 'FFDDEBF7';
+    const fin: Partial<ExcelJS.Border> = { style: 'thin' };
+    const bordures: Partial<ExcelJS.Borders> = { top: fin, left: fin, bottom: fin, right: fin };
+    const montant = '#,##0';
+
+    const colonnes = [
+      'N°', 'Classe', 'Reçu', 'Matricule', 'Prénoms & Nom', 'Frais inscription', 'Type inscription', 'T-shirt',
+      'Total frais insc + Ass', 'Jour versement', 'Frais études payés', 'Formations', 'Total payé', 'Observation',
     ];
+    const largeurs = [5, 10, 10, 12, 28, 12, 13, 11, 13, 12, 13, 12, 13, 16];
+    const colonnesMontant = [6, 8, 9, 11, 12, 13]; // F, H, I, K, L, M
     const nbCol = colonnes.length;
 
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Bordereau journalier');
-    colonnes.forEach((c, i) => (ws.getColumn(i + 1).width = c.largeur));
+    const ws = wb.addWorksheet('Bordereau journalier', {
+      pageSetup: { orientation: 'landscape', paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+    largeurs.forEach((l, i) => (ws.getColumn(i + 1).width = l));
 
-    ws.addRow([b.ecole.nom]).font = { bold: true, size: 14 };
-    ws.addRow(['République de Guinée — Travail, Justice, Solidarité']).font = { italic: true };
-    ws.addRow([]);
-    ws.mergeCells(4, 1, 4, nbCol);
-    ws.getCell(4, 1).value = 'BORDEREAU JOURNALIER';
-    ws.getCell(4, 1).font = { bold: true, size: 14 };
-    ws.getCell(4, 1).alignment = { horizontal: 'center' };
-    ws.addRow([`Date : ${dateFr}${niveau ? `  ·  Niveau : ${niveau.nom}` : ''}`]).font = { bold: true };
-    ws.addRow([]);
+    // En-tête : école à gauche, République et total du jour à droite
+    ws.mergeCells('A1:E2');
+    ws.getCell('A1').value = b.ecole.nom.toUpperCase();
+    ws.getCell('A1').font = { bold: true, size: 16, color: { argb: BLEU } };
+    ws.getCell('A1').alignment = { vertical: 'middle' };
+    ws.mergeCells('L1:N1');
+    ws.getCell('L1').value = 'REPUBLIQUE DE GUINEE';
+    ws.getCell('L1').font = { bold: true };
+    ws.getCell('L1').alignment = { horizontal: 'center' };
+    ws.mergeCells('L2:N2');
+    ws.getCell('L2').value = 'Travail-Justice-Solidarité';
+    ws.getCell('L2').font = { italic: true };
+    ws.getCell('L2').alignment = { horizontal: 'center' };
+    const totalJour = ws.getCell('M3');
+    totalJour.value = b.totaux.totalPaye;
+    totalJour.numFmt = montant;
+    totalJour.font = { bold: true };
+    totalJour.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
+    totalJour.border = bordures;
 
-    const entete = ws.addRow(colonnes.map((c) => c.titre));
-    entete.font = { bold: true };
-    entete.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    ws.mergeCells('A5:N5');
+    ws.getCell('A5').value = 'BORDEREAU JOURNALIER';
+    ws.getCell('A5').font = { bold: true, size: 14 };
+    ws.getCell('A5').alignment = { horizontal: 'center' };
+    if (niveau) {
+      ws.mergeCells('A6:N6');
+      ws.getCell('A6').value = `Niveau : ${niveau.nom}`;
+      ws.getCell('A6').font = { bold: true };
+      ws.getCell('A6').alignment = { horizontal: 'center' };
+    }
+
+    // Tableau (en-têtes en ligne 7, données dès la ligne 8)
+    const entete = ws.getRow(7);
+    entete.values = colonnes;
     entete.height = 32;
+    for (let c = 1; c <= nbCol; c++) {
+      const cell = entete.getCell(c);
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BLEU } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.border = bordures;
+    }
 
     b.lignes.forEach((l, i) => {
-      const row = ws.addRow([
+      const row = ws.getRow(8 + i);
+      row.values = [
         i + 1,
         l.classe,
-        l.numeroRecu,
-        l.numeroFacture,
+        l.numerosRecu.join('\n'),
         l.matricule ?? '',
         l.nomComplet,
-        l.typeOperation,
+        l.fraisInscription || '',
+        l.typeInscription,
+        l.assurance || '',
+        l.totalInscriptionAssurance || '',
         dateFr,
-        l.fraisEtudes > 0 ? l.fraisEtudes : '', // frais d'études seulement pour l'écolage et les trimestres
+        l.fraisEtudes || '',
+        l.fraisFormations || '',
         l.totalPaye,
         l.observation,
-      ]);
-      row.alignment = { vertical: 'top', wrapText: true };
-    });
-
-    // Ligne des totaux, sous les colonnes de montants
-    const totaux = ws.addRow(
-      colonnes.map((c) => {
-        if (c.titre === 'Prénoms & Nom') return 'Totaux';
-        if (c.titre === "Frais d'études payés") return b.totaux.fraisEtudes;
-        if (c.titre === 'Total payé') return b.totaux.totalPaye;
-        return '';
-      }),
-    );
-    totaux.font = { bold: true };
-
-    // Montants avec séparateur de milliers (les lignes de données commencent en 8)
-    colonnes.forEach((c, i) => {
-      if (!c.montant) return;
-      for (let r = 8; r <= totaux.number; r++) {
-        const cell = ws.getCell(r, i + 1);
-        if (typeof cell.value === 'number') cell.numFmt = '#,##0';
+      ];
+      for (let c = 1; c <= nbCol; c++) {
+        const cell = row.getCell(c);
+        cell.border = bordures;
+        const estMontant = colonnesMontant.includes(c);
+        cell.alignment = {
+          vertical: 'top',
+          wrapText: true,
+          horizontal: estMontant ? 'right' : c <= 3 ? 'center' : undefined,
+        };
+        if (estMontant) cell.numFmt = montant;
+        if (c <= 2) cell.font = { bold: true };
+        if (i % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: BLEU_CLAIR } };
       }
     });
 
-    ws.addRow([]);
-    ws.addRow([`${b.ecole.ville ? `${b.ecole.ville}, le` : 'Le'} ${dateFr}`]);
-    ws.addRow([]);
-    const signatures = ws.addRow(colonnes.map((_, i) => (i === 0 ? 'Directeur Général' : i === nbCol - 2 ? 'Percepteur-Comptable' : '')));
-    signatures.font = { bold: true };
+    // Totaux, encadrés sous les colonnes de montants
+    const ligneTotaux = 8 + b.lignes.length;
+    const totaux = ws.getRow(ligneTotaux);
+    totaux.getCell(5).value = 'Totaux';
+    totaux.getCell(5).alignment = { horizontal: 'right' };
+    const valeursTotaux: Record<number, number> = {
+      6: b.totaux.fraisInscription,
+      8: b.totaux.assurance,
+      9: b.totaux.totalInscriptionAssurance,
+      11: b.totaux.fraisEtudes,
+      12: b.totaux.fraisFormations,
+      13: b.totaux.totalPaye,
+    };
+    for (const [c, v] of Object.entries(valeursTotaux)) {
+      const cell = totaux.getCell(Number(c));
+      cell.value = v;
+      cell.numFmt = montant;
+      cell.border = bordures;
+      cell.alignment = { horizontal: 'right' };
+    }
+    totaux.font = { bold: true };
+
+    // Lieu et date, puis signatures
+    const ligneDate = ligneTotaux + 2;
+    ws.mergeCells(ligneDate, 12, ligneDate, 14);
+    const lieu = ws.getCell(ligneDate, 12);
+    lieu.value = `${b.ecole.ville ? `${b.ecole.ville}, le` : 'Le'} ${dateFr}`;
+    lieu.font = { bold: true, italic: true };
+    lieu.alignment = { horizontal: 'right' };
+
+    const ligneSignatures = ligneDate + 2;
+    ws.getCell(ligneSignatures, 2).value = 'Directeur Général';
+    ws.getCell(ligneSignatures, 11).value = 'Percepteur-Comptable';
+    ws.getRow(ligneSignatures).font = { bold: true };
+    const ligneNoms = ligneSignatures + 3;
+    ws.getCell(ligneNoms, 2).value = b.ecole.nomDirecteur ?? '';
+    ws.getCell(ligneNoms, 11).value = b.ecole.nomComptable ?? '';
 
     const slug = niveau ? `-${niveau.nom.replace(/[^A-Za-z0-9]+/g, '-')}` : '';
     return {

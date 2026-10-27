@@ -9,10 +9,13 @@ import {
   fetchFraisInscriptionNiveau,
   createFraisInscriptionNiveau,
   updateFraisInscriptionNiveau,
+  REGIMES,
+  libelleRegime,
+  type Regime,
   type TarifEcolage,
   type FraisInscriptionNiveau,
 } from '../../api/finances';
-import { fetchNiveaux, fetchAnneesScolaires } from '../../api/classes';
+import { fetchNiveaux, fetchAnneesScolaires, libelleAnnee } from '../../api/classes';
 
 export function TarifsEcolagePage() {
   const queryClient = useQueryClient();
@@ -27,6 +30,8 @@ export function TarifsEcolagePage() {
   const [libelle, setLibelle] = useState('');
   const [niveauId, setNiveauId] = useState<string | null>(null);
   const [montant, setMontant] = useState<number | ''>('');
+  const [regime, setRegime] = useState<string | null>(null);
+  const [dateEcheance, setDateEcheance] = useState('');
 
   const anneeCourante = annees?.find((a) => a.courante) ?? annees?.[0];
   const [anneeScolaireId, setAnneeScolaireId] = useState<string | null>(null);
@@ -39,6 +44,8 @@ export function TarifsEcolagePage() {
         anneeScolaireId: anneeSelectionnee!,
         libelle,
         montant: Number(montant),
+        regime: (regime ?? undefined) as Regime | undefined,
+        dateEcheance: dateEcheance || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tarifs'] });
@@ -46,6 +53,7 @@ export function TarifsEcolagePage() {
       setLibelle('');
       setNiveauId(null);
       setMontant('');
+      setDateEcheance('');
     },
     onError: (error: any) =>
       notifications.show({ message: error?.response?.data?.message ?? 'Erreur lors de la création du tarif', color: 'red' }),
@@ -56,12 +64,16 @@ export function TarifsEcolagePage() {
   const [libelleEdition, setLibelleEdition] = useState('');
   const [montantEdition, setMontantEdition] = useState<number | ''>('');
   const [anneeEditionTarif, setAnneeEditionTarif] = useState<string | null>(null);
+  const [regimeEdition, setRegimeEdition] = useState<string | null>(null);
+  const [echeanceEdition, setEcheanceEdition] = useState('');
 
   function ouvrirEditionTarif(t: TarifEcolage) {
     setTarifEnEdition(t);
     setLibelleEdition(t.libelle);
     setMontantEdition(Number(t.montant));
     setAnneeEditionTarif(t.anneeScolaireId);
+    setRegimeEdition(t.regime);
+    setEcheanceEdition(t.dateEcheance ? t.dateEcheance.slice(0, 10) : '');
   }
 
   const editionTarifMutation = useMutation({
@@ -70,6 +82,8 @@ export function TarifsEcolagePage() {
         libelle: libelleEdition,
         montant: Number(montantEdition),
         anneeScolaireId: anneeEditionTarif ?? undefined,
+        regime: regimeEdition as Regime | null,
+        dateEcheance: echeanceEdition || null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tarifs'] });
@@ -145,8 +159,10 @@ export function TarifsEcolagePage() {
       <Title order={2}>Tarifs d'écolage</Title>
       <Text size="sm" c="dimmed">
         Chaque tarif défini ici est facturé automatiquement à tout élève inscrit dans une classe de ce
-        niveau, pour l'année scolaire concernée. Plusieurs tarifs sur un même niveau (ex: par trimestre)
-        génèrent chacun leur propre facture.
+        niveau, pour l'année scolaire concernée. Plusieurs tarifs sur un même niveau (ex: par tranche)
+        génèrent chacun leur propre facture, avec l'échéance indiquée. Un tarif lié à un régime (externat,
+        semi-internat, internat, pensionnat) n'est facturé qu'aux élèves inscrits sous ce régime ; sans
+        régime, il s'applique à tous.
       </Text>
 
       <Paper withBorder p="md">
@@ -163,12 +179,27 @@ export function TarifsEcolagePage() {
           />
           <Select
             placeholder="Année scolaire"
-            data={(annees ?? []).map((a) => ({ value: a.id, label: a.libelle + (a.courante ? ' (courante)' : '') }))}
+            data={(annees ?? []).map((a) => ({ value: a.id, label: libelleAnnee(a) }))}
             value={anneeSelectionnee}
             onChange={setAnneeScolaireId}
             w={{ base: '100%', sm: 180 }}
           />
+          <Select
+            placeholder="Tous régimes"
+            data={REGIMES}
+            value={regime}
+            onChange={setRegime}
+            clearable
+            w={{ base: '100%', sm: 170 }}
+          />
           <NumberInput placeholder="Montant (GNF)" value={montant} onChange={(v) => setMontant(v === '' ? '' : Number(v))} />
+          <TextInput
+            type="date"
+            aria-label="Échéance (optionnelle)"
+            title="Échéance (optionnelle)"
+            value={dateEcheance}
+            onChange={(e) => setDateEcheance(e.currentTarget.value)}
+          />
           <Button
             disabled={!libelle || !niveauId || !montant || !anneeSelectionnee}
             loading={mutation.isPending}
@@ -182,14 +213,16 @@ export function TarifsEcolagePage() {
       {isLoading && <p>Chargement...</p>}
 
       {tarifs && (
-        <Table.ScrollContainer minWidth={620}>
+        <Table.ScrollContainer minWidth={820}>
           <Table striped highlightOnHover>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Niveau</Table.Th>
                 <Table.Th>Année scolaire</Table.Th>
+                <Table.Th>Régime</Table.Th>
                 <Table.Th>Libellé</Table.Th>
                 <Table.Th>Montant</Table.Th>
+                <Table.Th>Échéance</Table.Th>
                 <Table.Th />
               </Table.Tr>
             </Table.Thead>
@@ -198,8 +231,10 @@ export function TarifsEcolagePage() {
                 <Table.Tr key={t.id}>
                   <Table.Td>{t.niveau.nom}</Table.Td>
                   <Table.Td>{t.anneeScolaire?.libelle ?? '—'}</Table.Td>
+                  <Table.Td>{libelleRegime(t.regime)}</Table.Td>
                   <Table.Td>{t.libelle}</Table.Td>
                   <Table.Td>{Number(t.montant).toLocaleString('fr-FR')} GNF</Table.Td>
+                  <Table.Td>{t.dateEcheance ? new Date(t.dateEcheance).toLocaleDateString('fr-FR') : '—'}</Table.Td>
                   <Table.Td>
                     <Anchor component="button" type="button" size="sm" onClick={() => ouvrirEditionTarif(t)}>
                       Modifier
@@ -236,7 +271,7 @@ export function TarifsEcolagePage() {
           />
           <Select
             placeholder="Année scolaire"
-            data={(annees ?? []).map((a) => ({ value: a.id, label: a.libelle + (a.courante ? ' (courante)' : '') }))}
+            data={(annees ?? []).map((a) => ({ value: a.id, label: libelleAnnee(a) }))}
             value={anneeSelectionneeInscription}
             onChange={setAnneeScolaireIdInscription}
             w={{ base: '100%', sm: 180 }}
@@ -312,15 +347,29 @@ export function TarifsEcolagePage() {
           <TextInput label="Libellé" value={libelleEdition} onChange={(e) => setLibelleEdition(e.currentTarget.value)} />
           <Select
             label="Année scolaire"
-            data={(annees ?? []).map((a) => ({ value: a.id, label: a.libelle + (a.courante ? ' (courante)' : '') }))}
+            data={(annees ?? []).map((a) => ({ value: a.id, label: libelleAnnee(a) }))}
             value={anneeEditionTarif}
             onChange={setAnneeEditionTarif}
+          />
+          <Select
+            label="Régime"
+            placeholder="Tous régimes"
+            data={REGIMES}
+            value={regimeEdition}
+            onChange={setRegimeEdition}
+            clearable
           />
           <NumberInput
             label="Montant (GNF)"
             min={0}
             value={montantEdition}
             onChange={(v) => setMontantEdition(v === '' ? '' : Number(v))}
+          />
+          <TextInput
+            label="Échéance (optionnelle)"
+            type="date"
+            value={echeanceEdition}
+            onChange={(e) => setEcheanceEdition(e.currentTarget.value)}
           />
           <Button
             disabled={!libelleEdition || !montantEdition || !anneeEditionTarif}
@@ -341,7 +390,7 @@ export function TarifsEcolagePage() {
           )}
           <Select
             label="Année scolaire"
-            data={(annees ?? []).map((a) => ({ value: a.id, label: a.libelle + (a.courante ? ' (courante)' : '') }))}
+            data={(annees ?? []).map((a) => ({ value: a.id, label: libelleAnnee(a) }))}
             value={anneeEditionFrais}
             onChange={setAnneeEditionFrais}
           />

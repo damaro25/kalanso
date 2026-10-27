@@ -1,9 +1,22 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import type { RecuData } from './recu.util';
+import { formaterNumeroRecu } from './numero-recu.util';
+
+const LIBELLES_MODE: Record<string, string> = {
+  ESPECES: 'Espèces',
+  VIREMENT: 'Virement',
+  CHEQUE: 'Chèque',
+  MOBILE_MONEY: 'Mobile Money',
+  AUTRE: 'Autre',
+};
+import { estAnterieure, exigerTranchesPrecedentesSoldees } from './ordre-tranches.util';
+import { codeSuppressionValide } from '../finance/code-suppression';
 import { CreatePaiementDto } from './dto/paiement.dto';
 import { ModePaiement, StatutFacture } from '../generated/prisma/enums';
 import { libelleFraisInscription, montantFraisInscription } from './inscription.util';
 import { typeOperation } from './type-operation.util';
+import { detailResteAPayer, pourGroupe } from './reste-recu.util';
 
 export type TypeInscription = 'INSCRIPTION' | 'REINSCRIPTION';
 export type EtatInscription = 'A_PAYER' | 'PAYEE' | 'FRAIS_NON_DEFINIS';
@@ -27,6 +40,7 @@ export class PaiementsService {
     }
 
     const facture = await this.prisma.facture.findFirstOrThrow({ where: { id: dto.factureId, ecoleId } });
+    await exigerTranchesPrecedentesSoldees(this.prisma, facture);
 
     const nouveauMontantPaye = Number(facture.montantPaye) + dto.montant;
     if (nouveauMontantPaye > Number(facture.montantTotal)) {
@@ -55,6 +69,83 @@ export class PaiementsService {
     ]);
 
     return paiement;
+  }
+
+  // Annulation de paiements par le fondateur (code à 4 chiffres et motif exigés). Chaque paiement est retiré et sa
+  // copie gardée dans PaiementAnnule : le montant payé et le statut des factures se recalculent, et tout ce qui
+  // additionne les paiements (reste à payer, comptes, bordereau, reçus groupés « lot:… ») suit sans autre changement.
+  // On peut annuler une opération entière ou seulement certains de ses éléments, d'un seul élève à la fois.
+  async annuler(ecoleId: string, paiementIds: string[], motif: string, annuleParId: string, code?: string) {
+    if (!codeSuppressionValide(code)) {
+      throw new ForbiddenException(code ? 'Code incorrect' : 'Le code à 4 chiffres est requis pour annuler un paiement');
+    }
+    const raison = motif?.trim();
+    if (!raison) throw new BadRequestException("Indiquez le motif de l'annulation");
+    const ids = [...new Set(paiementIds ?? [])];
+    if (!ids.length) throw new BadRequestException('Aucun paiement à annuler');
+
+    const paiements = await this.prisma.paiement.findMany({ where: { id: { in: ids }, ecoleId }, include: { facture: true } });
+    if (paiements.length !== ids.length) {
+      throw new NotFoundException('Paiement introuvable : il a peut-être déjà été annulé');
+    }
+    const eleveId = paiements[0].facture.eleveId;
+    if (paiements.some((p) => p.facture.eleveId !== eleveId)) {
+      throw new BadRequestException("Les paiements à annuler doivent concerner un seul élève");
+    }
+
+    const retire = new Map<string, number>();
+    for (const p of paiements) retire.set(p.factureId, (retire.get(p.factureId) ?? 0) + Number(p.montant));
+
+    // Les tranches se paient dans l'ordre : une tranche ne redevient pas due tant qu'une tranche suivante garde un versement.
+    const ecolages = await this.prisma.facture.findMany({
+      where: { ecoleId, eleveId, type: 'ECOLAGE', statut: { not: 'ANNULEE' } },
+      select: { id: true, libelle: true, dateEcheance: true, anneeScolaireId: true, montantTotal: true, montantPaye: true },
+    });
+    const payeApres = (f: { id: string; montantPaye: unknown }) => Number(f.montantPaye) - (retire.get(f.id) ?? 0);
+    for (const f of ecolages) {
+      if (!retire.has(f.id) || payeApres(f) >= Number(f.montantTotal)) continue;
+      const suivante = ecolages.find((g) => g.anneeScolaireId === f.anneeScolaireId && g.id !== f.id && estAnterieure(f, g) && payeApres(g) > 0);
+      if (suivante) {
+        throw new BadRequestException(`Annulez d'abord les paiements de « ${suivante.libelle} » : les tranches se paient dans l'ordre.`);
+      }
+    }
+
+    await this.prisma.$transaction(
+      async (tx) => {
+        for (const p of paiements) {
+          await tx.paiementAnnule.create({
+            data: {
+              ecoleId,
+              eleveId,
+              factureId: p.factureId,
+              factureLibelle: p.facture.libelle,
+              paiementId: p.id,
+              numero: p.numero,
+              montant: p.montant,
+              mode: p.mode,
+              reference: p.reference,
+              datePaiement: p.datePaiement,
+              saisieParId: p.saisieParId,
+              motif: raison,
+              annuleParId,
+            },
+          });
+        }
+        await tx.transactionMobileMoney.updateMany({ where: { paiementId: { in: ids } }, data: { paiementId: null } });
+        await tx.paiement.deleteMany({ where: { id: { in: ids }, ecoleId } });
+        for (const factureId of retire.keys()) {
+          const facture = paiements.find((p) => p.factureId === factureId)!.facture;
+          const somme = await tx.paiement.aggregate({ where: { factureId }, _sum: { montant: true } });
+          const paye = Number(somme._sum.montant ?? 0);
+          const statut: StatutFacture =
+            facture.statut === 'ANNULEE' ? 'ANNULEE' : paye <= 0 ? 'IMPAYEE' : paye >= Number(facture.montantTotal) ? 'PAYEE' : 'PARTIELLE';
+          await tx.facture.update({ where: { id: factureId }, data: { montantPaye: paye, statut } });
+        }
+      },
+      { timeout: 60_000 },
+    );
+
+    return { annules: paiements.length, montant: paiements.reduce((a, p) => a + Number(p.montant), 0) };
   }
 
   // ── Paiement de l'inscription / de la réinscription ──
@@ -250,6 +341,27 @@ export class PaiementsService {
     };
   }
 
+  // Fenêtre « Payer » : le caissier choisit inscription ou réinscription tant que rien n'a été versé. La facture
+  // (créée au besoin) prend le libellé et le montant du type choisi ; le versement se fait ensuite comme une autre facture.
+  async changerTypeInscription(ecoleId: string, eleveId: string, type: TypeInscription) {
+    const c = await this.contexteInscription(ecoleId, eleveId, type);
+    if (c.typeRefuse) {
+      throw new BadRequestException("Le type d'opération ne peut plus être changé : un versement a déjà été enregistré sur cette facture");
+    }
+    if (c.etat === 'FRAIS_NON_DEFINIS') {
+      throw new BadRequestException(
+        `Aucun frais ${type === 'REINSCRIPTION' ? 'de réinscription' : "d'inscription"} n'est défini pour le niveau ${c.classe.niveau.nom}`,
+      );
+    }
+    const data = { libelle: libelleFraisInscription(type === 'REINSCRIPTION', c.classe.nom), montantTotal: c.montant };
+    if (!c.facture) {
+      await this.prisma.facture.create({ data: { ecoleId, eleveId, anneeScolaireId: c.annee.id, type: 'INSCRIPTION', ...data } });
+    } else if (c.typeChange) {
+      await this.prisma.facture.update({ where: { id: c.facture.id }, data });
+    }
+    return this.apercuInscription(ecoleId, eleveId);
+  }
+
   // `type` : inscription ou réinscription choisie par le caissier ; à défaut, celle détectée / de la facture.
   async payerInscription(ecoleId: string, eleveId: string, saisieParId: string, mode?: ModePaiement, type?: TypeInscription) {
     const c = await this.contexteInscription(ecoleId, eleveId, type);
@@ -293,6 +405,84 @@ export class PaiementsService {
       saisieParId,
     );
     return { paiement, factureId, type: c.type, montant: c.reste };
+  }
+
+  // Tout ce qu'imprime le reçu (modèle du carnet papier) : élève, matricule, niveau, régime, cycle, et ce qui
+  // reste dû par l'élève sur l'année de la facture (avec la prochaine échéance).
+  async donneesRecu(ecoleId: string, id: string): Promise<RecuData> {
+    const paiement = await this.findOne(ecoleId, id);
+    const { facture } = paiement;
+    // Plusieurs éléments payés en une fois depuis la fenêtre Payer (même référence « lot:… ») : un seul reçu,
+    // pour le total, au numéro du premier paiement.
+    const lot = paiement.reference?.startsWith('lot:')
+      ? await this.prisma.paiement.findMany({
+          where: { ecoleId, reference: paiement.reference },
+          include: { facture: { select: { type: true, libelle: true } } },
+          orderBy: [{ datePaiement: 'asc' }, { createdAt: 'asc' }],
+        })
+      : [];
+    const groupe = lot.length > 1 ? lot : null;
+    const [inscription, facturesAnnee] = await Promise.all([
+      this.prisma.inscription.findFirst({
+        where: { eleveId: facture.eleveId, anneeScolaireId: facture.anneeScolaireId },
+        include: { classe: { include: { niveau: true } } },
+      }),
+      this.prisma.facture.findMany({
+        where: { ecoleId, eleveId: facture.eleveId, anneeScolaireId: facture.anneeScolaireId, statut: { not: 'ANNULEE' } },
+        select: {
+          type: true,
+          libelle: true,
+          montantTotal: true,
+          dateEcheance: true,
+          createdAt: true,
+          paiements: { select: { montant: true, datePaiement: true } },
+        },
+      }),
+    ]);
+    const niveau = inscription?.classe.niveau;
+    const nom = `${niveau?.nom ?? ''} ${niveau?.cycle ?? ''}`;
+    const cycle = /cr[eè]che/i.test(nom)
+      ? 'CRECHE'
+      : /garderie/i.test(nom)
+        ? 'GARDERIE'
+        : /maternelle/i.test(nom)
+          ? 'MATERNELLE'
+          : /primaire/i.test(nom)
+            ? 'PRIMAIRE'
+            : null;
+    // Reste à payer tel qu'il était à la seconde où le reçu a été émis (même réimprimé plus tard) : seuls comptent
+    // les factures déjà créées et les versements faits jusqu'à cet instant.
+    const instant = Math.floor(Math.max(...(groupe ?? [paiement]).map((p) => new Date(p.datePaiement).getTime())) / 1000);
+    const avant = (d: Date) => Math.floor(new Date(d).getTime() / 1000) <= instant;
+    const dues = (facturesAnnee ?? [])
+      .filter((f) => !f.createdAt || avant(f.createdAt))
+      .map((f) => ({ ...f, montantPaye: (f.paiements ?? []).filter((p) => avant(p.datePaiement)).reduce((a, p) => a + Number(p.montant), 0) }))
+      .filter((f) => Number(f.montantTotal) > f.montantPaye);
+    const echeances = dues.map((f) => f.dateEcheance).filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime());
+    const ecole = facture.ecole;
+    return {
+      numero: formaterNumeroRecu(groupe ? groupe[0] : paiement),
+      entete: {
+        ministere: ecole.carteRetraitMinistere?.trim() || 'MEN-A',
+        dev: ecole.carteRetraitDev?.trim() || 'Conakry',
+        dce: ecole.carteRetraitDce?.trim() || 'Matoto',
+      },
+      adresse: `Matoto – Kissosso Tel : ${ecole.telephone?.trim() || '655 54 07 03 / 622 14 91 07 / 622 19 30 28 / 628 04 66 12'}`,
+      email: ecole.email?.trim() || 'mametahold016@gmail.com',
+      eleveNom: facture.eleve.nom,
+      elevePrenom: facture.eleve.prenom,
+      matricule: facture.eleve.matricule,
+      niveau: niveau?.nom ?? null,
+      cycle,
+      regime: inscription?.regime ?? null,
+      factureLibelle: groupe ? pourGroupe(groupe.map((p) => p.facture)) : facture.libelle,
+      montant: groupe ? groupe.reduce((acc, p) => acc + Number(p.montant), 0) : Number(paiement.montant),
+      mode: LIBELLES_MODE[paiement.mode] ?? paiement.mode,
+      resteAPayer: dues.reduce((acc, f) => acc + Number(f.montantTotal) - Number(f.montantPaye), 0),
+      resteDetail: detailResteAPayer(dues),
+      prochaineEcheance: echeances[0] ?? null,
+      datePaiement: paiement.datePaiement,
+    };
   }
 
   async findOne(ecoleId: string, id: string) {

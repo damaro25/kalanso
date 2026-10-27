@@ -136,6 +136,47 @@ describe('AdmissionsService', () => {
       expect(r.eleve).toEqual({ id: 'e-new' });
     });
 
+    it('sans filiation saisie : seul le parent principal est lié', async () => {
+      await service.accepter('ecole', 'd1', { classeId: 'c1' } as any, 'u1');
+      expect(prisma.parentTuteur.create).toHaveBeenCalledTimes(1);
+      expect(prisma.eleveParent.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("reporte la filiation (père, mère) sur l'élève, le parent saisi restant le contact principal", async () => {
+      prisma.demandeInscription.findFirst.mockResolvedValue({
+        id: 'd1',
+        statut: 'EN_ATTENTE',
+        ...demandeBase,
+        perePrenom: 'Kalilou',
+        pereNom: 'Camara',
+        pereTelephone: '620000000',
+        pereProfession: 'Commerçant',
+        merePrenom: 'Aïssata',
+        mereNom: 'Bah',
+        mereTelephone: null,
+        mereProfession: null,
+      });
+      prisma.parentTuteur.create
+        .mockResolvedValueOnce({ id: 'p-principal' })
+        .mockResolvedValueOnce({ id: 'p-pere' })
+        .mockResolvedValueOnce({ id: 'p-mere' });
+      prisma.eleveParent.findFirst.mockResolvedValue(null);
+
+      await service.accepter('ecole', 'd1', { classeId: 'c1' } as any, 'u1');
+
+      expect(prisma.parentTuteur.create.mock.calls[1][0].data).toEqual({
+        ecoleId: 'ecole', prenom: 'Kalilou', nom: 'Camara', telephone: '620000000', profession: 'Commerçant',
+      });
+      expect(prisma.parentTuteur.create.mock.calls[2][0].data).toEqual({
+        ecoleId: 'ecole', prenom: 'Aïssata', nom: 'Bah', telephone: null, profession: null,
+      });
+      expect(prisma.eleveParent.create.mock.calls.map((c: any) => [c[0].data.lien, c[0].data.contactPrincipal])).toEqual([
+        ['Parent', true],
+        ['Père', false],
+        ['Mère', false],
+      ]);
+    });
+
     it("génère les factures d'enrôlement après la transaction, pour la classe et son année", async () => {
       await service.accepter('ecole', 'd1', { classeId: 'c1' } as any, 'u1');
       expect(factures.genererFacturesEnrolement).toHaveBeenCalledWith('ecole', 'e-new', 'c1', 'a-classe');
@@ -262,6 +303,25 @@ describe('AdmissionsService', () => {
       const r = await service.inscrireSurPlace('ecole', { ...demandeBase, dateNaissance: '2015-01-01' } as any);
       expect(r.ecoleId).toBe('ecole');
       expect(prisma.eleve.create).not.toHaveBeenCalled();
+    });
+
+    it('enregistre la filiation facultative, champs vides ignorés', async () => {
+      prisma.demandeInscription.create.mockImplementation(async ({ data }: any) => data);
+      const r = await service.inscrireSurPlace('ecole', {
+        ...demandeBase,
+        perePrenom: ' Kalilou ',
+        pereNom: 'Camara',
+        pereTelephone: '',
+        pereProfession: 'Commerçant',
+      } as any);
+      expect(r).toMatchObject({
+        perePrenom: 'Kalilou',
+        pereNom: 'Camara',
+        pereTelephone: null,
+        pereProfession: 'Commerçant',
+        merePrenom: null,
+        mereNom: null,
+      });
     });
   });
 

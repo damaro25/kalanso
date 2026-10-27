@@ -15,6 +15,7 @@ describe('CommunicationService', () => {
     service = new CommunicationService(prisma, sms as any);
 
     prisma.eleve.findFirstOrThrow.mockResolvedValue({ id: 'e1' });
+    prisma.ecole.findUnique.mockResolvedValue({ nom: 'Les Ecoles Mamé-TA' });
     prisma.eleveParent.findMany.mockResolvedValue([lien('pt1', '620000001'), lien('pt2', '620000002')]);
     prisma.messageParent.create.mockImplementation(async ({ data }: any) => ({ id: `m-${data.parentTuteurId}`, ...data }));
     prisma.messageParent.update.mockImplementation(async ({ where, data }: any) => ({ id: where.id, ...data }));
@@ -23,6 +24,50 @@ describe('CommunicationService', () => {
   });
 
   afterEach(() => jest.restoreAllMocks());
+
+  describe('destinataires : le seul contact principal', () => {
+    const lienComplet = (parentTuteurId: string, lienParente: string, telephone: string | null, contactPrincipal = false) => ({
+      parentTuteurId,
+      lien: lienParente,
+      contactPrincipal,
+      parentTuteur: { telephone },
+    });
+
+    it("n'envoie qu'au téléphone du contact principal, même si le père et la mère ont un numéro", async () => {
+      prisma.eleveParent.findMany.mockResolvedValue([
+        lienComplet('pt-principal', 'Parent', '626912827', true),
+        lienComplet('pt-pere', 'Père', '620000001'),
+        lienComplet('pt-mere', 'Mère', '620000002'),
+      ]);
+      prisma.eleve.findFirst.mockResolvedValue({ id: 'e1', nom: 'Diallo', prenom: 'Fatou' });
+
+      await service.notifierAbsence('ecole', 'e1', new Date('2026-10-05T12:00:00Z'));
+      await service.envoyerMessageEleve('ecole', 'e1', 'Réunion', 'u1');
+
+      expect(sms.envoyer).toHaveBeenCalledTimes(2); // un SMS par envoi, pas trois
+      expect(sms.envoyer.mock.calls.map((c) => c[0])).toEqual(['626912827', '626912827']);
+    });
+
+    it("contact principal sans numéro : aucun SMS, même si le père en a un", async () => {
+      prisma.eleveParent.findMany.mockResolvedValue([
+        lienComplet('pt-principal', 'Parent', null, true),
+        lienComplet('pt-pere', 'Père', '620000001'),
+      ]);
+      prisma.eleve.findFirst.mockResolvedValue({ id: 'e1', nom: 'Diallo', prenom: 'Fatou' });
+      await service.notifierAbsence('ecole', 'e1', new Date('2026-10-05T12:00:00Z'));
+      await expect(service.envoyerMessageEleve('ecole', 'e1', 'Salut', 'u1')).rejects.toThrow(BadRequestException);
+      expect(sms.envoyer).not.toHaveBeenCalled();
+    });
+
+    it('sans contact principal désigné (données anciennes) : les parents liés, hors père et mère', async () => {
+      prisma.eleveParent.findMany.mockResolvedValue([
+        lienComplet('pt-tuteur', 'Tuteur', '620000003'),
+        lienComplet('pt-mere', 'Mère', '620000002'),
+      ]);
+      await service.envoyerMessageEleve('ecole', 'e1', 'Salut', 'u1');
+      expect(sms.envoyer.mock.calls.map((c) => c[0])).toEqual(['620000003']);
+    });
+  });
 
   describe('envoyerMessageEleve', () => {
     it("refuse un élève d'une autre école", async () => {
@@ -107,6 +152,7 @@ describe('CommunicationService', () => {
       prisma.eleve.findFirst.mockResolvedValue({ id: 'e1', nom: 'Diallo', prenom: 'Fatou' });
       await service.notifierAbsence('ecole', 'e1', new Date('2026-10-05T12:00:00Z'));
       const contenu: string = sms.envoyer.mock.calls[0][1];
+      expect(contenu.startsWith('Les Ecoles Mamé-TA : ')).toBe(true); // signé du nom de l'école
       expect(contenu).toContain('Fatou Diallo');
       expect(contenu).toContain('05/10/2026');
       expect(prisma.messageParent.create.mock.calls[0][0].data.type).toBe('ABSENCE');
@@ -141,10 +187,18 @@ describe('CommunicationService', () => {
       await service.rappelImpaye('ecole', 'f1', 'u1');
       const contenu: string = sms.envoyer.mock.calls[0][1];
       expect(contenu).toContain('Fatou Diallo');
+      expect(contenu.startsWith('Les Ecoles Mamé-TA : ')).toBe(true);
       expect(contenu).toContain('Écolage T1');
       expect(contenu.replace(/[\s  ]/g, '')).toContain('300000GNF');
       expect(prisma.messageParent.create.mock.calls[0][0].data).toMatchObject({ type: 'RAPPEL_IMPAYE', envoyeParId: 'u1' });
     });
+  });
+
+  it("sans nom d'école, les SMS gardent l'ancienne signature", async () => {
+    prisma.ecole.findUnique.mockResolvedValue(null);
+    prisma.eleve.findFirst.mockResolvedValue({ id: 'e1', nom: 'Diallo', prenom: 'Fatou' });
+    await service.notifierAbsence('ecole', 'e1', new Date('2026-10-05T12:00:00Z'));
+    expect(sms.envoyer.mock.calls[0][1].startsWith('La cible du formateur : ')).toBe(true);
   });
 
   it('journal : 200 derniers messages de l\'école', async () => {

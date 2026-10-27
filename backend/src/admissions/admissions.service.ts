@@ -7,6 +7,7 @@ import {
   InscriptionDirecteDto,
   RefuserDemandeDto,
 } from './dto/demande.dto';
+import { enregistrerFiliation } from '../eleves/filiation.util';
 
 @Injectable()
 export class AdmissionsService {
@@ -119,12 +120,28 @@ export class AdmissionsService {
         },
       });
 
+      // Filiation saisie à l'inscription sur place : père et mère liés à l'élève (le parent ci-dessus reste le
+      // contact principal).
+      await enregistrerFiliation(tx, ecoleId, eleve.id, 'Père', {
+        prenom: demande.perePrenom,
+        nom: demande.pereNom,
+        telephone: demande.pereTelephone,
+        profession: demande.pereProfession,
+      });
+      await enregistrerFiliation(tx, ecoleId, eleve.id, 'Mère', {
+        prenom: demande.merePrenom,
+        nom: demande.mereNom,
+        telephone: demande.mereTelephone,
+        profession: demande.mereProfession,
+      });
+
       await tx.inscription.create({
         data: {
           ecoleId,
           eleveId: eleve.id,
           classeId: dto.classeId,
           anneeScolaireId: classe.anneeScolaireId,
+          regime: dto.regime,
         },
       });
 
@@ -158,6 +175,15 @@ export class AdmissionsService {
         prenomParent: dto.prenomParent,
         telephoneParent: dto.telephoneParent,
         emailParent: dto.emailParent,
+        // Filiation facultative : champs vides ignorés
+        perePrenom: dto.perePrenom?.trim() || null,
+        pereNom: dto.pereNom?.trim() || null,
+        pereTelephone: dto.pereTelephone?.trim() || null,
+        pereProfession: dto.pereProfession?.trim() || null,
+        merePrenom: dto.merePrenom?.trim() || null,
+        mereNom: dto.mereNom?.trim() || null,
+        mereTelephone: dto.mereTelephone?.trim() || null,
+        mereProfession: dto.mereProfession?.trim() || null,
       },
     });
   }
@@ -207,6 +233,7 @@ export class AdmissionsService {
 
       await tx.transactionMobileMoney.deleteMany({ where: { facture: { eleveId } } });
       await tx.paiement.deleteMany({ where: { facture: { eleveId } } });
+      await tx.paiementAnnule.deleteMany({ where: { eleveId } });
       await tx.facture.deleteMany({ where: { eleveId } });
       await tx.note.deleteMany({ where: { eleveId } });
       await tx.absence.deleteMany({ where: { eleveId } });
