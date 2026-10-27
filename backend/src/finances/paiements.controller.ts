@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -9,6 +9,7 @@ import { RoleUtilisateur } from '../generated/prisma/enums';
 import { PaiementsService } from './paiements.service';
 import { CreatePaiementDto } from './dto/paiement.dto';
 import { PayerInscriptionDto } from './dto/payer-inscription.dto';
+import { AnnulerPaiementsDto } from './dto/annuler-paiements.dto';
 import { genererRecuPdf } from './recu.util';
 
 const ROLES_FINANCES = [RoleUtilisateur.FONDATEUR, RoleUtilisateur.CHEF_ETABLISSEMENT, RoleUtilisateur.COMPTABLE];
@@ -68,6 +69,13 @@ export class PaiementsController {
   ) {
     if (!dto.type) throw new BadRequestException("Type d'opération requis");
     return this.service.changerTypeInscription(user.ecoleId, eleveId, dto.type);
+  }
+
+  // Annulation tracée, réservée au fondateur ; le code à 4 chiffres voyage dans un en-tête (pas dans les journaux d'accès).
+  @Post('annulation')
+  @Roles(RoleUtilisateur.FONDATEUR)
+  annuler(@CurrentUser() user: JwtPayloadUser, @Body() dto: AnnulerPaiementsDto, @Headers('x-code-suppression') code?: string) {
+    return this.service.annuler(user.ecoleId, dto.paiementIds, dto.motif, user.userId, code);
   }
 
   @Get(':id/recu')

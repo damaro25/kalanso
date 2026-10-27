@@ -233,6 +233,7 @@ export class AdmissionsService {
 
       await tx.transactionMobileMoney.deleteMany({ where: { facture: { eleveId } } });
       await tx.paiement.deleteMany({ where: { facture: { eleveId } } });
+      await tx.paiementAnnule.deleteMany({ where: { eleveId } });
       await tx.facture.deleteMany({ where: { eleveId } });
       await tx.note.deleteMany({ where: { eleveId } });
       await tx.absence.deleteMany({ where: { eleveId } });

@@ -120,6 +120,7 @@ export class ElevesService {
         const liensParents = await tx.eleveParent.findMany({ where: { eleveId: id } });
         await tx.transactionMobileMoney.deleteMany({ where: { facture: { eleveId: id } } });
         await tx.paiement.deleteMany({ where: { facture: { eleveId: id } } });
+        await tx.paiementAnnule.deleteMany({ where: { eleveId: id } });
         await tx.facture.deleteMany({ where: { eleveId: id } });
         await tx.note.deleteMany({ where: { eleveId: id } });
         await tx.absence.deleteMany({ where: { eleveId: id } });
@@ -190,12 +191,15 @@ export class ElevesService {
       },
     });
 
+    // Paiements annulés par le fondateur : affichés dans l'historique, barrés, avec le motif
+    const paiementsAnnules = await this.prisma.paiementAnnule.findMany({ where: { ecoleId, eleveId: id }, orderBy: { annuleLe: 'desc' } });
+
     const solde = eleve.factures.reduce(
       (acc, f) => (f.statut === 'ANNULEE' ? acc : acc + (Number(f.montantTotal) - Number(f.montantPaye))),
       0,
     );
 
-    return { ...eleve, absencesCount, solde };
+    return { ...eleve, absencesCount, solde, paiementsAnnules };
   }
 
   // Fiche d'enseignant : limitée à l'identité, à la classe et aux absences (les notes s'obtiennent par le bulletin).

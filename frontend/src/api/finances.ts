@@ -214,3 +214,14 @@ export async function telechargerModeleFactures() {
   const response = await apiClient.get('/reporting/export/factures-modele.xlsx', { responseType: 'blob' });
   telechargerBlob(response, 'modele-import-factures.xlsx');
 }
+
+// Annulation tracée de paiements (fondateur) : le code à 4 chiffres voyage dans un en-tête, comme pour les suppressions.
+export async function annulerPaiements(paiementIds: string[], motif: string, code: string) {
+  const { data } = await apiClient.post<{ annules: number; montant: number }>(
+    '/paiements/annulation',
+    { paiementIds, motif },
+    { headers: { 'X-Code-Suppression': code } },
+  );
+  rafraichirFinances();
+  return data;
+}

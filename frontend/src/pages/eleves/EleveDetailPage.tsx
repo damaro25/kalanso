@@ -1,13 +1,14 @@
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Title, Text, Paper, Group, Stack, Button, Badge, SimpleGrid } from '@mantine/core';
-import { IconCash, IconEye } from '@tabler/icons-react';
+import { IconCash, IconEye, IconReceiptOff } from '@tabler/icons-react';
 import { useState } from 'react';
 import { fetchEleveFiche } from '../../api/eleves';
 import { ouvrirFacturePdf, ouvrirRecu, libelleRegime } from '../../api/finances';
 import { Filiation } from './Filiation';
 import { TranchesEcolage } from './TranchesEcolage';
 import { PayerModal, lignesAPayer } from './PayerModal';
+import { AnnulationPaiementModal, type OperationPaiement } from './AnnulationPaiementModal';
 import { useAuth } from '../../auth/AuthContext';
 
 const STATUTS_FACTURE: Record<string, string> = {
@@ -22,6 +23,8 @@ export function EleveDetailPage() {
   const { user } = useAuth();
   // Un enseignant reçoit une fiche restreinte (identité, classe, absences, bulletin) : ni finances, ni parents.
   const estEnseignant = user?.role === 'ENSEIGNANT';
+  // Annuler un paiement : réservé au fondateur (le serveur le vérifie aussi)
+  const peutAnnuler = user?.role === 'FONDATEUR';
 
   const { data: fiche, isLoading } = useQuery({
     queryKey: ['eleve-fiche', id],
@@ -30,6 +33,7 @@ export function EleveDetailPage() {
   });
 
   const [paiementOuvert, setPaiementOuvert] = useState(false);
+  const [aAnnuler, setAAnnuler] = useState<OperationPaiement | null>(null);
 
   if (isLoading || !fiche) return <p>Chargement...</p>;
 
@@ -48,14 +52,25 @@ export function EleveDetailPage() {
   const historique = Object.values(
     factures
       .flatMap((f) => (f.paiements ?? []).map((p: any) => ({ paiement: p, facture: f })))
-      .reduce((ops: Record<string, { paiement: any; libelles: string[]; montant: number }>, { paiement: p, facture: f }) => {
+      .reduce((ops: Record<string, { paiement: any; libelles: string[]; montant: number; elements: OperationPaiement['elements'] }>, { paiement: p, facture: f }) => {
         const cle = p.reference?.startsWith('lot:') ? p.reference : p.id;
-        const op = (ops[cle] ??= { paiement: p, libelles: [], montant: 0 });
+        const op = (ops[cle] ??= { paiement: p, libelles: [], montant: 0, elements: [] });
         op.libelles.push(f.libelle);
         op.montant += Number(p.montant);
+        op.elements.push({ id: p.id, libelle: f.libelle, montant: Number(p.montant) });
         return ops;
       }, {}),
   ).sort((a, b) => new Date(b.paiement.datePaiement).getTime() - new Date(a.paiement.datePaiement).getTime());
+  // Paiements annulés, regroupés comme l'opération d'origine (même lot, annulés ensemble)
+  const annules = Object.values(
+    ((fiche.paiementsAnnules ?? []) as any[]).reduce((ops: Record<string, { a: any; libelles: string[]; montant: number }>, a) => {
+      const cle = `${a.reference?.startsWith('lot:') ? a.reference : a.paiementId}|${a.annuleLe}`;
+      const op = (ops[cle] ??= { a, libelles: [], montant: 0 });
+      op.libelles.push(a.factureLibelle);
+      op.montant += Number(a.montant);
+      return ops;
+    }, {}),
+  );
 
   return (
     <Stack>
@@ -142,12 +157,12 @@ export function EleveDetailPage() {
           <Text fw={600} size="sm" mb={4}>
             Historique des paiements
           </Text>
-          {historique.length === 0 && (
+          {historique.length === 0 && annules.length === 0 && (
             <Text size="sm" c="dimmed">
               Aucun paiement enregistré
             </Text>
           )}
-          {historique.map(({ paiement: p, libelles, montant }) => (
+          {historique.map(({ paiement: p, libelles, montant, elements }) => (
             <Group key={p.id} justify="space-between">
               <Text size="sm">
                 {new Date(p.datePaiement).toLocaleDateString('fr-FR')} : {montant.toLocaleString('fr-FR')} GNF ({p.mode}){' '}
@@ -155,10 +170,34 @@ export function EleveDetailPage() {
                   {libelles.join(' + ')}
                 </Text>
               </Text>
-              <Button size="xs" variant="subtle" leftSection={<IconEye size={14} stroke={1.5} />} onClick={() => ouvrirRecu(p.id)}>
-                Voir le reçu
-              </Button>
+              <Group gap={4}>
+                <Button size="xs" variant="subtle" leftSection={<IconEye size={14} stroke={1.5} />} onClick={() => ouvrirRecu(p.id)}>
+                  Voir le reçu
+                </Button>
+                {peutAnnuler && (
+                  <Button
+                    size="xs"
+                    variant="subtle"
+                    color="red"
+                    leftSection={<IconReceiptOff size={14} stroke={1.5} />}
+                    onClick={() => setAAnnuler({ date: p.datePaiement, mode: p.mode, elements })}
+                  >
+                    Annuler
+                  </Button>
+                )}
+              </Group>
             </Group>
+          ))}
+          {annules.map(({ a, libelles, montant }) => (
+            <Text key={a.id} size="sm" c="dimmed">
+              <Text span size="sm" td="line-through">
+                {new Date(a.datePaiement).toLocaleDateString('fr-FR')} : {montant.toLocaleString('fr-FR')} GNF ({a.mode}) {libelles.join(' + ')}
+              </Text>{' '}
+              <Badge size="xs" color="red" variant="light">
+                annulé le {new Date(a.annuleLe).toLocaleDateString('fr-FR')}
+              </Badge>{' '}
+              {a.motif}
+            </Text>
           ))}
         </Paper>
       )}
@@ -174,6 +213,7 @@ export function EleveDetailPage() {
       {Array.isArray(fiche.factures) && (
         <PayerModal eleveId={id!} factures={factures} opened={paiementOuvert} onClose={() => setPaiementOuvert(false)} />
       )}
+      {peutAnnuler && <AnnulationPaiementModal eleveId={id!} operation={aAnnuler} onClose={() => setAAnnuler(null)} />}
     </Stack>
   );
 }

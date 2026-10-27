@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RecuData } from './recu.util';
 import { formaterNumeroRecu } from './numero-recu.util';
@@ -10,7 +10,8 @@ const LIBELLES_MODE: Record<string, string> = {
   MOBILE_MONEY: 'Mobile Money',
   AUTRE: 'Autre',
 };
-import { exigerTranchesPrecedentesSoldees } from './ordre-tranches.util';
+import { estAnterieure, exigerTranchesPrecedentesSoldees } from './ordre-tranches.util';
+import { codeSuppressionValide } from '../finance/code-suppression';
 import { CreatePaiementDto } from './dto/paiement.dto';
 import { ModePaiement, StatutFacture } from '../generated/prisma/enums';
 import { libelleFraisInscription, montantFraisInscription } from './inscription.util';
@@ -68,6 +69,83 @@ export class PaiementsService {
     ]);
 
     return paiement;
+  }
+
+  // Annulation de paiements par le fondateur (code à 4 chiffres et motif exigés). Chaque paiement est retiré et sa
+  // copie gardée dans PaiementAnnule : le montant payé et le statut des factures se recalculent, et tout ce qui
+  // additionne les paiements (reste à payer, comptes, bordereau, reçus groupés « lot:… ») suit sans autre changement.
+  // On peut annuler une opération entière ou seulement certains de ses éléments, d'un seul élève à la fois.
+  async annuler(ecoleId: string, paiementIds: string[], motif: string, annuleParId: string, code?: string) {
+    if (!codeSuppressionValide(code)) {
+      throw new ForbiddenException(code ? 'Code incorrect' : 'Le code à 4 chiffres est requis pour annuler un paiement');
+    }
+    const raison = motif?.trim();
+    if (!raison) throw new BadRequestException("Indiquez le motif de l'annulation");
+    const ids = [...new Set(paiementIds ?? [])];
+    if (!ids.length) throw new BadRequestException('Aucun paiement à annuler');
+
+    const paiements = await this.prisma.paiement.findMany({ where: { id: { in: ids }, ecoleId }, include: { facture: true } });
+    if (paiements.length !== ids.length) {
+      throw new NotFoundException('Paiement introuvable : il a peut-être déjà été annulé');
+    }
+    const eleveId = paiements[0].facture.eleveId;
+    if (paiements.some((p) => p.facture.eleveId !== eleveId)) {
+      throw new BadRequestException("Les paiements à annuler doivent concerner un seul élève");
+    }
+
+    const retire = new Map<string, number>();
+    for (const p of paiements) retire.set(p.factureId, (retire.get(p.factureId) ?? 0) + Number(p.montant));
+
+    // Les tranches se paient dans l'ordre : une tranche ne redevient pas due tant qu'une tranche suivante garde un versement.
+    const ecolages = await this.prisma.facture.findMany({
+      where: { ecoleId, eleveId, type: 'ECOLAGE', statut: { not: 'ANNULEE' } },
+      select: { id: true, libelle: true, dateEcheance: true, anneeScolaireId: true, montantTotal: true, montantPaye: true },
+    });
+    const payeApres = (f: { id: string; montantPaye: unknown }) => Number(f.montantPaye) - (retire.get(f.id) ?? 0);
+    for (const f of ecolages) {
+      if (!retire.has(f.id) || payeApres(f) >= Number(f.montantTotal)) continue;
+      const suivante = ecolages.find((g) => g.anneeScolaireId === f.anneeScolaireId && g.id !== f.id && estAnterieure(f, g) && payeApres(g) > 0);
+      if (suivante) {
+        throw new BadRequestException(`Annulez d'abord les paiements de « ${suivante.libelle} » : les tranches se paient dans l'ordre.`);
+      }
+    }
+
+    await this.prisma.$transaction(
+      async (tx) => {
+        for (const p of paiements) {
+          await tx.paiementAnnule.create({
+            data: {
+              ecoleId,
+              eleveId,
+              factureId: p.factureId,
+              factureLibelle: p.facture.libelle,
+              paiementId: p.id,
+              numero: p.numero,
+              montant: p.montant,
+              mode: p.mode,
+              reference: p.reference,
+              datePaiement: p.datePaiement,
+              saisieParId: p.saisieParId,
+              motif: raison,
+              annuleParId,
+            },
+          });
+        }
+        await tx.transactionMobileMoney.updateMany({ where: { paiementId: { in: ids } }, data: { paiementId: null } });
+        await tx.paiement.deleteMany({ where: { id: { in: ids }, ecoleId } });
+        for (const factureId of retire.keys()) {
+          const facture = paiements.find((p) => p.factureId === factureId)!.facture;
+          const somme = await tx.paiement.aggregate({ where: { factureId }, _sum: { montant: true } });
+          const paye = Number(somme._sum.montant ?? 0);
+          const statut: StatutFacture =
+            facture.statut === 'ANNULEE' ? 'ANNULEE' : paye <= 0 ? 'IMPAYEE' : paye >= Number(facture.montantTotal) ? 'PAYEE' : 'PARTIELLE';
+          await tx.facture.update({ where: { id: factureId }, data: { montantPaye: paye, statut } });
+        }
+      },
+      { timeout: 60_000 },
+    );
+
+    return { annules: paiements.length, montant: paiements.reduce((a, p) => a + Number(p.montant), 0) };
   }
 
   // ── Paiement de l'inscription / de la réinscription ──

@@ -567,6 +567,31 @@ model Paiement {
   @@map("paiements")
 }
 
+// Trace d'un paiement annulé par le fondateur : le paiement est retiré (les factures, le reste à payer, les comptes
+// et les reçus groupés se recalculent d'eux-mêmes), cette ligne en garde la copie, le motif, qui et quand.
+// Sans relation : la trace survit à la facture, et elle est supprimée avec l'élève.
+model PaiementAnnule {
+  id             String       @id @default(cuid())
+  ecoleId        String
+  eleveId        String
+  factureId      String
+  factureLibelle String
+  paiementId     String
+  numero         Int?
+  montant        Decimal      @db.Decimal(12, 2)
+  mode           ModePaiement
+  reference      String?
+  datePaiement   DateTime
+  saisieParId    String?
+  motif          String
+  annuleParId    String?
+  annuleLe       DateTime     @default(now())
+
+  @@index([ecoleId, annuleLe])
+  @@index([eleveId])
+  @@map("paiements_annules")
+}
+
 model TransactionMobileMoney {
   id           String               @id @default(cuid())
   ecoleId      String
